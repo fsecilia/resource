@@ -2,24 +2,25 @@
 # Copyright (c) 2026 Frank Secilia
 
 add_library(Resource INTERFACE)
+add_library(Resource::Resource ALIAS Resource)
 target_sources(
     Resource
     PUBLIC
         FILE_SET public_headers
         TYPE HEADERS
-        BASE_DIRS "${CMAKE_SOURCE_DIR}/src"
+        BASE_DIRS "${PROJECT_SOURCE_DIR}/src"
         FILES resource.hpp
 )
 canon_apply_library(Resource)
 
-include(CTest)
-if (BUILD_TESTING)
+if (PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
     message(CHECK_START "finding googletest")
-    if (NOT TARGET GTest::gmock_main)
-        if (EXISTS "${CMAKE_SOURCE_DIR}/external/googletest/CMakeLists.txt")
+    if (NOT TARGET GTest::gtest_main)
+        if (EXISTS "${PROJECT_SOURCE_DIR}/external/googletest/CMakeLists.txt")
             message(CHECK_PASS "using vendored googletest")
-            add_subdirectory("${CMAKE_SOURCE_DIR}/external/googletest"
-                "${CMAKE_BINARY_DIR}/external/googletest"
+            add_subdirectory(
+                "${PROJECT_SOURCE_DIR}/external/googletest"
+                "${PROJECT_BINARY_DIR}/external/googletest"
                 EXCLUDE_FROM_ALL
             )
         else()
@@ -27,7 +28,7 @@ if (BUILD_TESTING)
             find_package(GTest "1.16.0...<2.0.0" CONFIG)
         endif()
     endif()
-    if (NOT TARGET GTest::gmock_main)
+    if (NOT TARGET GTest::gtest_main)
         message(CHECK_FAIL "compatible system googletest not found")
         message(FATAL_ERROR
             "dependency 'googletest' unavailable; initialize submodule "
@@ -36,14 +37,51 @@ if (BUILD_TESTING)
     endif()
 
     add_executable(ResourceTest)
+    set_target_properties(ResourceTest PROPERTIES OUTPUT_NAME resource_test)
     target_sources(ResourceTest PRIVATE
         resource_test.cpp
     )
     target_link_libraries(ResourceTest PRIVATE
-        GTest::gmock
-        GTest::gmock_main
+        Resource::Resource
+        GTest::gtest_main
     )
-    canon_apply_executable(ResourceTest)
+    add_test(NAME ResourceTest COMMAND ResourceTest)
+    canon_apply_target(ResourceTest)
+
+    function(_resource_expect_compile_failure NAME SOURCE)
+        get_target_property(_cxx_standard ResourceTest CXX_STANDARD)
+        get_target_property(
+            _cxx_standard_required
+            ResourceTest
+            CXX_STANDARD_REQUIRED
+        )
+
+        try_compile(
+            _compiled
+            SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}"
+            NO_CACHE
+            CMAKE_FLAGS
+                "-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY"
+            CXX_STANDARD "${_cxx_standard}"
+            CXX_STANDARD_REQUIRED "${_cxx_standard_required}"
+            OUTPUT_VARIABLE _output
+        )
+
+        if (_compiled)
+            message(FATAL_ERROR
+                "compile-fail fixture '${NAME}' compiled successfully:\n${_output}"
+            )
+        endif()
+    endfunction()
+
+    _resource_expect_compile_failure(
+        default-sentinel-fundamental
+        default_sentinel_fundamental_compile_fail.cpp
+    )
+    _resource_expect_compile_failure(
+        default-sentinel-pointer
+        default_sentinel_pointer_compile_fail.cpp
+    )
 endif()
 
 canon_add_documentation()

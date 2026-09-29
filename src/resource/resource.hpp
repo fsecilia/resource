@@ -53,9 +53,9 @@ struct DefaultSentinel {
 namespace detail {
 
 template <typename Type>
-concept NothrowMovableObject = std::is_object_v<Type> && !std::is_array_v<Type> &&
-                               std::same_as<Type, std::remove_cv_t<Type>> &&
-                               std::is_nothrow_move_constructible_v<Type> && std::is_nothrow_destructible_v<Type>;
+concept NothrowMovableObject =
+    std::is_object_v<Type> && !std::is_array_v<Type> && std::same_as<Type, std::remove_cv_t<Type>> &&
+    std::is_nothrow_move_constructible_v<Type> && std::is_nothrow_destructible_v<Type>;
 
 template <typename Value>
 concept ResourceValue = NothrowMovableObject<Value>;
@@ -71,18 +71,15 @@ template <typename Value>
 concept DefaultSentinelCustomizable = std::is_class_v<Value> || std::is_enum_v<Value>;
 
 template <typename Value>
-concept DefaultSentinelReadable = DefaultSentinelCustomizable<Value> && requires {
-    DefaultSentinel<Value>::value;
-};
+concept DefaultSentinelReadable = DefaultSentinelCustomizable<Value> && requires { DefaultSentinel<Value>::value; };
 
 template <typename Value>
 concept DefaultSentinelAbsent = DefaultSentinelReadable<Value> &&
-                                std::same_as<std::remove_cv_t<decltype(DefaultSentinel<Value>::value)>,
-                                             NoDefaultSentinel>;
+    std::same_as<std::remove_cv_t<decltype(DefaultSentinel<Value>::value)>, NoDefaultSentinel>;
 
 template <typename Value>
 concept DefaultSentinelPresent = DefaultSentinelReadable<Value> && !DefaultSentinelAbsent<Value> &&
-                                 SentinelCompatible<Value, DefaultSentinel<Value>::value>;
+    SentinelCompatible<Value, DefaultSentinel<Value>::value>;
 
 template <typename Value>
 struct DefaultPolicySelector;
@@ -147,7 +144,8 @@ public:
         requires std::is_copy_constructible_v<Value>
         : value_{std::in_place, value} {}
 
-    explicit constexpr OptionalStorage(Value&& value) noexcept : value_{std::in_place, std::move(value)} {}
+    explicit constexpr OptionalStorage(Value&& value) noexcept
+        : value_{std::in_place, std::move(value)} {}
 
     constexpr OptionalStorage(OptionalStorage const&) = delete;
     constexpr auto operator=(OptionalStorage const&) -> OptionalStorage& = delete;
@@ -172,9 +170,7 @@ public:
         return *this;
     }
 
-    constexpr auto owns() const noexcept -> bool {
-        return value_.has_value();
-    }
+    constexpr auto owns() const noexcept -> bool { return value_.has_value(); }
 
     constexpr auto get() const noexcept -> Value const& {
         assert(owns());
@@ -202,18 +198,21 @@ template <typename Value, auto sentinelValue>
     requires SentinelCompatible<Value, sentinelValue>
 class SentinelStorage final {
 public:
-    constexpr SentinelStorage() noexcept : value_{sentinelValue} {}
+    constexpr SentinelStorage() noexcept
+        : value_{sentinelValue} {}
 
     explicit constexpr SentinelStorage(Value const& value)
         requires std::is_copy_constructible_v<Value>
         : value_{canonicalize(value)} {}
 
-    explicit constexpr SentinelStorage(Value&& value) noexcept : value_{canonicalize(std::move(value))} {}
+    explicit constexpr SentinelStorage(Value&& value) noexcept
+        : value_{canonicalize(std::move(value))} {}
 
     constexpr SentinelStorage(SentinelStorage const&) = delete;
     constexpr auto operator=(SentinelStorage const&) -> SentinelStorage& = delete;
 
-    constexpr SentinelStorage(SentinelStorage&& source) noexcept : value_{takeForMove(source)} {}
+    constexpr SentinelStorage(SentinelStorage&& source) noexcept
+        : value_{takeForMove(source)} {}
 
     constexpr auto operator=(SentinelStorage&& source) noexcept -> SentinelStorage& {
         if (this == std::addressof(source)) {
@@ -229,9 +228,7 @@ public:
         return *this;
     }
 
-    constexpr auto owns() const noexcept -> bool {
-        return !isSentinel(value_);
-    }
+    constexpr auto owns() const noexcept -> bool { return !isSentinel(value_); }
 
     constexpr auto get() const noexcept -> Value const& {
         assert(owns());
@@ -265,9 +262,7 @@ private:
         return static_cast<bool>(value == sentinelValue);
     }
 
-    static constexpr auto emptyValue() noexcept -> Value {
-        return Value{sentinelValue};
-    }
+    static constexpr auto emptyValue() noexcept -> Value { return Value{sentinelValue}; }
 
     static constexpr auto canonicalize(Value const& value) -> Value
         requires std::is_copy_constructible_v<Value>
@@ -299,21 +294,14 @@ private:
 };
 
 template <typename Value, auto projection, auto sentinelValue>
-concept ProjectedSentinelCompatible = ResourceValue<Value> &&
-                                      std::is_member_object_pointer_v<decltype(projection)> &&
-                                      requires(Value& value, Value const& constValue) {
-                                          requires std::is_lvalue_reference_v<
-                                              decltype(std::invoke(projection, value))>;
-                                          requires(!std::is_const_v<std::remove_reference_t<
-                                              decltype(std::invoke(projection, value))>>);
-                                          requires(!std::is_volatile_v<std::remove_reference_t<
-                                              decltype(std::invoke(projection, value))>>);
-                                          requires SentinelCompatible<
-                                              std::remove_cvref_t<decltype(std::invoke(projection, value))>,
-                                              sentinelValue>;
-                                          { std::invoke(projection, constValue) == sentinelValue } noexcept
-                                              -> std::convertible_to<bool>;
-                                      };
+concept ProjectedSentinelCompatible = ResourceValue<Value> && std::is_member_object_pointer_v<decltype(projection)> &&
+    requires(Value& value, Value const& constValue) {
+        requires std::is_lvalue_reference_v<decltype(std::invoke(projection, value))>;
+        requires(!std::is_const_v<std::remove_reference_t<decltype(std::invoke(projection, value))>>);
+        requires(!std::is_volatile_v<std::remove_reference_t<decltype(std::invoke(projection, value))>>);
+        requires SentinelCompatible<std::remove_cvref_t<decltype(std::invoke(projection, value))>, sentinelValue>;
+        { std::invoke(projection, constValue) == sentinelValue } noexcept -> std::convertible_to<bool>;
+    };
 
 template <typename Value, auto projection, auto sentinelValue>
     requires ProjectedSentinelCompatible<Value, projection, sentinelValue>
@@ -359,9 +347,7 @@ public:
         return *this;
     }
 
-    constexpr auto owns() const noexcept -> bool {
-        return !isSentinel(value_);
-    }
+    constexpr auto owns() const noexcept -> bool { return !isSentinel(value_); }
 
     constexpr auto get() const noexcept -> Value const& {
         assert(owns());
@@ -396,7 +382,8 @@ private:
         }
     }
 
-    constexpr ProjectedSentinelStorage(Value&& value, bool incomingOwns) noexcept : value_{std::move(value)} {
+    constexpr ProjectedSentinelStorage(Value&& value, bool incomingOwns) noexcept
+        : value_{std::move(value)} {
         if (!incomingOwns) {
             disengage(value_);
         }
@@ -411,9 +398,7 @@ private:
         }
     }
 
-    static constexpr auto projected(Value& value) noexcept -> ProjectedValue& {
-        return std::invoke(projection, value);
-    }
+    static constexpr auto projected(Value& value) noexcept -> ProjectedValue& { return std::invoke(projection, value); }
 
     static constexpr auto projected(Value const& value) noexcept -> ProjectedValue const& {
         return std::invoke(projection, value);
@@ -452,9 +437,7 @@ struct StorageFor<Value, ProjectedSentinel<projection, sentinelValue>> final {
 };
 
 template <typename Value, typename Disengagement>
-concept StoragePolicy = requires {
-    typename StorageFor<Value, Disengagement>::Type;
-};
+concept StoragePolicy = requires { typename StorageFor<Value, Disengagement>::Type; };
 
 template <typename Value, typename Disengagement>
     requires StoragePolicy<Value, Disengagement>
@@ -475,7 +458,7 @@ concept NothrowEqualityComparable = requires(Value const& left, Value const& rig
 /// Owns one external resource identity and destroys it with an explicit deleter.
 template <typename Value, typename Deleter, typename Disengagement = detail::DefaultPolicy<Value>>
     requires detail::ResourceValue<Value> && detail::ResourceDeleter<Deleter, Value> &&
-             detail::StoragePolicy<Value, Disengagement>
+    detail::StoragePolicy<Value, Disengagement>
 class Resource final {
 private:
     using Storage = detail::StorageForT<Value, Disengagement>;
@@ -483,23 +466,26 @@ private:
 public:
     constexpr Resource() noexcept
         requires std::is_nothrow_default_constructible_v<Deleter> && (!std::is_pointer_v<Deleter>) &&
-                 (!std::is_member_pointer_v<Deleter>) && std::is_nothrow_default_constructible_v<Storage>
-        : deleter_{}, storage_{} {}
+                     (!std::is_member_pointer_v<Deleter>) && std::is_nothrow_default_constructible_v<Storage>
+        : deleter_{},
+          storage_{} {}
 
     explicit constexpr Resource(Deleter deleter) noexcept
         requires std::is_nothrow_default_constructible_v<Storage>
-        : deleter_{std::move(deleter)}, storage_{} {}
+        : deleter_{std::move(deleter)},
+          storage_{} {}
 
-    constexpr Resource(Value const& value, Deleter deleter)
-        noexcept(std::is_nothrow_copy_constructible_v<Value>)
+    constexpr Resource(Value const& value, Deleter deleter) noexcept(std::is_nothrow_copy_constructible_v<Value>)
         requires std::is_copy_constructible_v<Value>
-        : deleter_{std::move(deleter)}, storage_{value} {}
+        : deleter_{std::move(deleter)},
+          storage_{value} {}
 
     constexpr Resource(Value&& value, Deleter deleter) noexcept
-        : deleter_{std::move(deleter)}, storage_{std::move(value)} {}
+        : deleter_{std::move(deleter)},
+          storage_{std::move(value)} {}
 
-    constexpr Resource(Value const& value, Deleter deleter, Disengagement)
-        noexcept(std::is_nothrow_copy_constructible_v<Value>)
+    constexpr Resource(Value const& value, Deleter deleter, Disengagement) noexcept(
+        std::is_nothrow_copy_constructible_v<Value>)
         requires std::is_copy_constructible_v<Value>
         : Resource{value, std::move(deleter)} {}
 
@@ -510,7 +496,8 @@ public:
     constexpr auto operator=(Resource const&) -> Resource& = delete;
 
     constexpr Resource(Resource&& source) noexcept
-        : deleter_{std::move(source.deleter_)}, storage_{std::move(source.storage_)} {}
+        : deleter_{std::move(source.deleter_)},
+          storage_{std::move(source.storage_)} {}
 
     constexpr auto operator=(Resource&& source) noexcept -> Resource& {
         if (this == std::addressof(source)) {
@@ -523,48 +510,34 @@ public:
         return *this;
     }
 
-    constexpr ~Resource() noexcept {
-        reset();
-    }
+    constexpr ~Resource() noexcept { reset(); }
 
     /// Returns whether this object owns a resource identity.
-    constexpr auto owns() const noexcept -> bool {
-        return storage_.owns();
-    }
+    constexpr auto owns() const noexcept -> bool { return storage_.owns(); }
 
     /// Tests whether this object owns a resource identity.
-    explicit constexpr operator bool() const noexcept {
-        return owns();
-    }
+    explicit constexpr operator bool() const noexcept { return owns(); }
 
     /// Returns the owned identity.
     ///
     /// \pre `owns()` is true.
-    constexpr auto get() const noexcept -> Value const& {
-        return storage_.get();
-    }
+    constexpr auto get() const noexcept -> Value const& { return storage_.get(); }
 
     /// Returns the owned identity.
     ///
     /// \pre `owns()` is true.
-    constexpr auto operator*() const noexcept -> Value const& {
-        return get();
-    }
+    constexpr auto operator*() const noexcept -> Value const& { return get(); }
 
     /// Returns a pointer to the owned identity.
     ///
     /// \pre `owns()` is true.
-    constexpr auto operator->() const noexcept -> Value const* {
-        return std::addressof(get());
-    }
+    constexpr auto operator->() const noexcept -> Value const* { return std::addressof(get()); }
 
     /// Releases ownership without invoking the deleter.
     ///
     /// \pre `owns()` is true.
     /// \returns The transferred resource identity.
-    [[nodiscard]] constexpr auto release() noexcept -> Value {
-        return storage_.release();
-    }
+    [[nodiscard]] constexpr auto release() noexcept -> Value { return storage_.release(); }
 
     /// Destroys the owned resource when engaged and leaves this object disengaged.
     constexpr auto reset() noexcept -> void {
@@ -612,5 +585,11 @@ private:
     [[no_unique_address]] Deleter deleter_;
     Storage storage_;
 };
+
+template <typename Value, typename Deleter>
+Resource(Value, Deleter) -> Resource<Value, Deleter>;
+
+template <typename Value, typename Deleter, typename Disengagement>
+Resource(Value, Deleter, Disengagement) -> Resource<Value, Deleter, Disengagement>;
 
 } // namespace resource

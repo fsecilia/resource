@@ -6,7 +6,7 @@ This is the design ledger for the standalone resource-ownership library being de
 
 No production commits have been made yet. The library/repository name is `resource`, the root namespace is `resource`, and `Resource` is the public owner type. Production C++ lives under `src/resource/`; the primary public header is `resource/resource.hpp`.
 
-The attached `resource.tar.gz` is archaeological reference material from Axiom, not a specification. It also contains the current standards submodule. Before production code is written, re-read the C++ standards documents in that archive and keep the implementation aligned with them.
+The current `resource` tree is the working implementation. Any earlier Axiom/reference archive remains archaeological material rather than a specification. The checked-in `standards/` submodule is authoritative for project style and structure.
 
 Prototype spikes in this thread were exercised with GCC 14.2 and Clang 17, with sanitizer passes where noted. The design is moving quickly, so code in this ledger records semantics and useful implementation shapes rather than claiming final source layout.
 
@@ -211,7 +211,7 @@ Target shape:
 Resource<Value, Deleter, Disengagement>
 ```
 
-Likely policies:
+Current public policies:
 
 ```cpp
 Sentinel<sentinelValue>
@@ -287,7 +287,7 @@ template <auto sentinelValue>
 inline constexpr Sentinel<sentinelValue> sentinel{};
 ```
 
-The production constructors provide sufficient implicit deduction guides; no explicit CTAD guides are currently needed to turn the third tag argument into the third `Resource` template argument.
+Production provides explicit deduction guides for the two- and three-argument forms. The constructors already make CTAD mechanically possible, but explicit guides document that CTAD is intentional and avoid Clang's `-Wctad-maybe-unsupported` diagnostic.
 
 Typed sentinels remain available when useful:
 
@@ -325,7 +325,7 @@ This is analogous to constructing or resetting a `std::unique_ptr` with `nullptr
 
 ## Private storage implementations
 
-Expected private storage implementations are conceptually:
+Current private storage implementations are:
 
 ```text
 OptionalStorage<Value>
@@ -333,7 +333,7 @@ SentinelStorage<Value, sentinel>
 ProjectedSentinelStorage<Value, projection, sentinel>
 ```
 
-Exact names and file layout are not settled.
+These names are implemented in the single public template header `resource/resource.hpp`.
 
 Storage is responsible only for zero-or-one identity representation and transfer.
 
@@ -533,13 +533,13 @@ For a stateful deleter, subject to the same storage constraint:
 Resource<Value, Deleter> resource{deleter};
 ```
 
-These forms can later acquire an identity through `reset(value)`. The exact constructor constraints remain part of the cohesion pass; do not manufacture an empty compound identity merely to make these constructors universally available.
+These forms can later acquire an identity through `reset(value)`. The constructor constraints deliberately do not manufacture an empty compound identity merely to make projected-sentinel resources universally default-constructible.
 
 CTAD cannot infer `Value` from the deleter-only form, and that is acceptable. Delayed acquisition is most useful for members and other contexts where the resource type is already spelled.
 
 ## Ownership operations
 
-Current target surface:
+Current public surface:
 
 ```cpp
 explicit operator bool() const noexcept;
@@ -582,7 +582,7 @@ resource.reset(resource.get());
 
 The old identity would be destroyed and then its now-dead identity adopted again.
 
-Current leaning: add an opportunistic debug assertion only when `Value` already supports nothrow equality comparison. Do not add equality comparability as a requirement of `Resource`.
+The implementation adds an opportunistic debug assertion only when `Value` already supports nothrow equality comparison. Equality comparability is not a requirement of `Resource`.
 
 Conceptual shape:
 
@@ -597,7 +597,7 @@ if constexpr (requires(Value const& left, Value const& right) {
 }
 ```
 
-This remains a design point to confirm during the cohesion pass.
+This behavior survived the cohesion pass and is part of the current production candidate.
 
 ## Deliberately omitted surface
 
@@ -872,9 +872,7 @@ Storage owns engagement and ownership-transfer mechanics.
 
 The Vulkan layer decides what bookkeeping belongs in each resource identity.
 
-## Cohesion pass: next work
-
-The next spike should stop expanding the architecture and assemble the singular design into its likely real source organization.
+## Cohesion pass: resolved production shape
 
 The cohesion pass resolved the singular production shape:
 
@@ -890,18 +888,30 @@ The cohesion pass resolved the singular production shape:
 - zero-argument construction excludes pointer and member-pointer deleters;
 - projected empty construction exists only when its `Value` can itself be default-constructed without throwing;
 - production stays in one self-contained public template header for now;
-- implicit CTAD guides are sufficient;
+- explicit CTAD guides document the supported two- and three-argument deduction forms;
 - empty deleter + pointer `Resource` is verified to have pointer size;
 - public value construction/reset use `const&` and `&&` overloads instead of by-value parameters so sentinel state is observed before a move;
 - projected storage does not return a sentinel-restored local by value; doing so could re-move the sentinel when NRVO is not performed;
 - sentinel reconstruction constructs directly from the reusable NTTP sentinel rather than constructing a local sentinel and moving it into place.
 
-The focused suite currently uses compile-time assertions for structural contracts and GTest for runtime behavior. It contains 41 runtime tests. GCC 14.2 and Clang 17 warning-as-error builds, Release builds, and ASan/UBSan runs are green.
+The focused suite uses compile-time assertions for structural contracts, two configure-time compile-fail fixtures for forbidden `DefaultSentinel` specializations, and GTest for runtime behavior. It contains 41 runtime tests, discovered individually by CTest.
+
+The working project integration now provides the same `Resource::Resource` target for source-tree and installed consumers. Tests are top-level-only, use plain `GTest::gtest_main`, and are not installed. Vendored GoogleTest is preferred when initialized; otherwise the project searches for a compatible host package.
+
+Current validation:
+
+- GCC 14.2 Debug and Release warning-as-error builds pass all 41 tests;
+- GCC 14.2 AddressSanitizer passes all 41 tests;
+- Clang 17 passes all 41 tests with `-Wall -Wextra -Wpedantic -Werror`;
+- source-tree `add_subdirectory()` consumption and installed `find_package(Resource)` consumption both build and run;
+- clang-format 17.0.6 reports the C++ sources clean.
+
+The current Canon snapshot's Clang `-Weverything -Werror` policy is not yet green. Its diagnostics include C++ compatibility warnings that conflict with the current Standards rules, unavoidable class-padding warnings, and GoogleTest registration's global constructors. Do not contort Resource around those diagnostics; reconcile the Canon warning policy separately.
 
 After this singular production pass:
 
-- integrate the header/test with the real project build metadata;
-- keep the ledger synchronized with any review corrections;
+- keep the ledger synchronized with review corrections;
+- reconcile the current Canon Clang warning-policy mismatch;
 - only then investigate `ResourceCollection`.
 
 ## Testing expectations
