@@ -49,6 +49,12 @@ if (PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
     canon_apply_target(ResourceTest)
 
     function(_resource_expect_compile_failure NAME SOURCE)
+        if (ARGC LESS 3)
+            message(FATAL_ERROR
+                "compile-fail fixture '${NAME}' requires an expected diagnostic"
+            )
+        endif()
+
         get_target_property(_cxx_standard ResourceTest CXX_STANDARD)
         get_target_property(
             _cxx_standard_required
@@ -62,6 +68,7 @@ if (PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
             NO_CACHE
             CMAKE_FLAGS
                 "-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY"
+                "-DCMAKE_CXX_SCAN_FOR_MODULES=OFF"
             CXX_STANDARD "${_cxx_standard}"
             CXX_STANDARD_REQUIRED "${_cxx_standard_required}"
             OUTPUT_VARIABLE _output
@@ -72,15 +79,29 @@ if (PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
                 "compile-fail fixture '${NAME}' compiled successfully:\n${_output}"
             )
         endif()
+
+        foreach(_expected IN LISTS ARGN)
+            string(FIND "${_output}" "${_expected}" _expected_index)
+            if (_expected_index EQUAL -1)
+                message(FATAL_ERROR
+                    "compile-fail fixture '${NAME}' failed for an unexpected reason; "
+                    "expected diagnostic fragment '${_expected}':\n${_output}"
+                )
+            endif()
+        endforeach()
     endfunction()
 
     _resource_expect_compile_failure(
         default-sentinel-fundamental
         default_sentinel_fundamental_compile_fail.cpp
+        DefaultSentinel
+        "constraints not satisfied"
     )
     _resource_expect_compile_failure(
         default-sentinel-pointer
         default_sentinel_pointer_compile_fail.cpp
+        DefaultSentinel
+        "constraints not satisfied"
     )
 endif()
 
