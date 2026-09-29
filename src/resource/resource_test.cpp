@@ -42,6 +42,21 @@ struct CountStrongDelete final {
     constexpr auto operator()(StrongHandle const&) const noexcept -> void { ++*count; }
 };
 
+class OpaqueHandle final {
+public:
+    constexpr explicit OpaqueHandle(int value) noexcept
+        : value_{value} {}
+
+    friend constexpr auto operator==(OpaqueHandle const&, OpaqueHandle const&) noexcept -> bool = default;
+
+private:
+    int value_;
+};
+
+struct DeleteOpaque final {
+    constexpr auto operator()(OpaqueHandle const&) const noexcept -> void {}
+};
+
 struct PlainHandle final {
     int value;
 };
@@ -244,8 +259,8 @@ struct OwnershipProbeDelete final {
 template <typename Value, typename Deleter>
 concept DefaultResourceFormable = requires { typename Resource<Value, Deleter>; };
 
-template <typename Value, typename Deleter, typename Disengagement>
-concept ResourceFormable = requires { typename Resource<Value, Deleter, Disengagement>; };
+template <typename Value, typename Deleter, typename SentinelType>
+concept ResourceFormable = requires { typename Resource<Value, Deleter, SentinelType>; };
 
 template <typename Value>
 concept DefaultSentinelNameable = requires { typename DefaultSentinel<Value>; };
@@ -269,6 +284,11 @@ struct DefaultSentinel<EnumHandle> final {
 };
 
 template <>
+struct DefaultSentinel<OpaqueHandle> final {
+    static constexpr OpaqueHandle value{-1};
+};
+
+template <>
 struct DefaultSentinel<MalformedHandle> final {
     static constexpr auto value = nullptr;
 };
@@ -276,6 +296,7 @@ struct DefaultSentinel<MalformedHandle> final {
 namespace {
 
 using PointerResource = Resource<int*, EmptyPointerDelete>;
+using OpaqueResource = Resource<OpaqueHandle, DeleteOpaque>;
 using FunctionDelete = void (*)(int const&) noexcept;
 using FunctionDeleteResource = Resource<int, FunctionDelete>;
 using MemberDelete = void (MemberDeletedValue::*)() const noexcept;
@@ -292,6 +313,7 @@ using NonAssignableMoveChangingResource = Resource<NonAssignableMoveChangingHand
     DeleteNonAssignableMoveChangingHandle, Sentinel<NonAssignableMoveChangingHandle{-1}>>;
 
 static_assert(sizeof(PointerResource) == sizeof(int*));
+static_assert(sizeof(OpaqueResource) == sizeof(OpaqueHandle));
 static_assert(!std::copy_constructible<PointerResource>);
 static_assert(!std::is_copy_assignable_v<PointerResource>);
 static_assert(std::is_nothrow_move_constructible_v<PointerResource>);
@@ -309,6 +331,7 @@ static_assert(
 static_assert(std::same_as<decltype(Resource{StrongHandle{7}, CountStrongDelete{nullptr}}),
     Resource<StrongHandle, CountStrongDelete>>);
 static_assert(std::same_as<decltype(Resource{EnumHandle::valid, DeleteEnum{}}), Resource<EnumHandle, DeleteEnum>>);
+static_assert(std::same_as<decltype(Resource{OpaqueHandle{7}, DeleteOpaque{}}), OpaqueResource>);
 static_assert(std::same_as<decltype(Resource{Compound{3, StrongHandle{7}}, DestroyCompound{nullptr},
                                projectedSentinel<&Compound::handle, StrongHandle{-1}>}),
     CompoundResource>);
@@ -317,6 +340,7 @@ static_assert(!DefaultSentinelNameable<int>);
 static_assert(!DefaultSentinelNameable<int*>);
 static_assert(DefaultSentinelNameable<StrongHandle>);
 static_assert(DefaultSentinelNameable<EnumHandle>);
+static_assert(DefaultSentinelNameable<OpaqueHandle>);
 static_assert(ProjectedSentinelNameable<&IntCompound::handle, -1>);
 static_assert(!ProjectedSentinelNameable<nullptr, -1>);
 
@@ -371,6 +395,12 @@ TEST(ResourceTest, StrongHandleUsesDefaultSentinel) {
 
 TEST(ResourceTest, EnumUsesDefaultSentinel) {
     auto resource = Resource{EnumHandle::invalid, DeleteEnum{}};
+
+    EXPECT_FALSE(resource);
+}
+
+TEST(ResourceTest, NonStructuralHandleUsesDefaultSentinel) {
+    auto resource = Resource{OpaqueHandle{-1}, DeleteOpaque{}};
 
     EXPECT_FALSE(resource);
 }

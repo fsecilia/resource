@@ -18,13 +18,31 @@ namespace resource {
 
 namespace detail {
 
-struct NoDefaultSentinel final {};
+struct NoSentinel final {};
+
+template <typename Type>
+concept NothrowMovableObject =
+    std::is_object_v<Type> && !std::is_array_v<Type> && std::same_as<Type, std::remove_cv_t<Type>> &&
+    std::is_nothrow_move_constructible_v<Type> && std::is_nothrow_destructible_v<Type>;
 
 } // namespace detail
 
+/// Describes a type that can represent an owned external resource identity.
+template <typename Value>
+concept ResourceValue = detail::NothrowMovableObject<Value>;
+
+/// Describes a deleter that destroys a resource identity without throwing.
+template <typename Deleter, typename Value>
+concept ResourceDeleter =
+    ResourceValue<Value> && detail::NothrowMovableObject<Deleter> && requires(Deleter& deleter, Value const& value) {
+        { std::invoke(deleter, value) } noexcept -> std::same_as<void>;
+    };
+
 /// Describes an in-band value that represents a disengaged resource.
 template <auto sentinelValue>
-struct Sentinel final {};
+struct Sentinel final {
+    static constexpr auto value = sentinelValue;
+};
 
 /// Tag object for selecting an explicit in-band sentinel through CTAD.
 template <auto sentinelValue>
@@ -46,70 +64,90 @@ inline constexpr ProjectedSentinel<projection, sentinelValue> projectedSentinel{
 /// and pointer types cannot specialize this customization point.
 template <typename Value>
     requires(std::is_class_v<Value> || std::is_enum_v<Value>)
-struct DefaultSentinel {
-    static constexpr detail::NoDefaultSentinel value{};
-};
+struct DefaultSentinel;
 
 namespace detail {
 
 template <typename Type>
-concept NothrowMovableObject =
-    std::is_object_v<Type> && !std::is_array_v<Type> && std::same_as<Type, std::remove_cv_t<Type>> &&
-    std::is_nothrow_move_constructible_v<Type> && std::is_nothrow_destructible_v<Type>;
+struct IsExplicitSentinel final : std::false_type {};
 
-template <typename Value>
-concept ResourceValue = NothrowMovableObject<Value>;
+template <auto sentinelValue>
+struct IsExplicitSentinel<Sentinel<sentinelValue>> final : std::true_type {};
 
-template <typename Value, auto sentinelValue>
-concept SentinelCompatible = ResourceValue<Value> && requires(Value* location, Value const& value) {
-    { Value{sentinelValue} } noexcept -> std::same_as<Value>;
-    { std::construct_at(location, sentinelValue) } noexcept -> std::same_as<Value*>;
-    { value == sentinelValue } noexcept -> std::convertible_to<bool>;
+template <typename Type>
+concept ExplicitSentinel = IsExplicitSentinel<Type>::value;
+
+template <typename Value, typename SentinelType>
+concept DirectSentinelCompatible = ResourceValue<Value> && requires(Value* location, Value const& value) {
+    { Value{SentinelType::value} } noexcept -> std::same_as<Value>;
+    { std::construct_at(location, SentinelType::value) } noexcept -> std::same_as<Value*>;
+    { value == SentinelType::value } noexcept -> std::convertible_to<bool>;
 };
 
 template <typename Value>
 concept DefaultSentinelCustomizable = std::is_class_v<Value> || std::is_enum_v<Value>;
 
 template <typename Value>
-concept DefaultSentinelReadable = DefaultSentinelCustomizable<Value> && requires { DefaultSentinel<Value>::value; };
+concept DefaultSentinelSpecialized = DefaultSentinelCustomizable<Value> && requires { sizeof(DefaultSentinel<Value>); };
 
-template <typename Value>
-concept DefaultSentinelAbsent = DefaultSentinelReadable<Value> &&
-    std::same_as<std::remove_cv_t<decltype(DefaultSentinel<Value>::value)>, NoDefaultSentinel>;
+template <typename SentinelType, typename Value>
+concept DefaultSentinelForValue =
+    DefaultSentinelSpecialized<Value> && std::same_as<SentinelType, DefaultSentinel<Value>>;
 
-template <typename Value>
-concept DefaultSentinelPresent = DefaultSentinelReadable<Value> && !DefaultSentinelAbsent<Value> &&
-    SentinelCompatible<Value, DefaultSentinel<Value>::value>;
+template <typename SentinelType, typename Value>
+concept DirectSentinelFor = (ExplicitSentinel<SentinelType> || DefaultSentinelForValue<SentinelType, Value>) &&
+    DirectSentinelCompatible<Value, SentinelType>;
 
-template <typename Value>
-struct DefaultPolicySelector;
+template <typename Value, auto projection, auto sentinelValue>
+concept ProjectedSentinelCompatible = ResourceValue<Value> && std::is_member_object_pointer_v<decltype(projection)> &&
+    requires(Value& value, Value const& constValue) {
+        requires std::is_lvalue_reference_v<decltype(std::invoke(projection, value))>;
+        requires(!std::is_const_v<std::remove_reference_t<decltype(std::invoke(projection, value))>>);
+        requires(!std::is_volatile_v<std::remove_reference_t<decltype(std::invoke(projection, value))>>);
+        requires DirectSentinelCompatible<std::remove_cvref_t<decltype(std::invoke(projection, value))>,
+            Sentinel<sentinelValue>>;
+        { std::invoke(projection, constValue) == sentinelValue } noexcept -> std::convertible_to<bool>;
+    };
 
-template <typename Value>
+template <typename SentinelType, typename Value>
+struct IsProjectedSentinelFor final : std::false_type {};
+
+template <auto projection, auto sentinelValue, typename Value>
+struct IsProjectedSentinelFor<ProjectedSentinel<projection, sentinelValue>, Value> final
+    : std::bool_constant<ProjectedSentinelCompatible<Value, projection, sentinelValue>> {};
+
+template <typename SentinelType, typename Value>
+concept ProjectedSentinelFor = IsProjectedSentinelFor<SentinelType, Value>::value;
+
+template <ResourceValue Value>
+struct DefaultSentinelSelector {
+    using Type = NoSentinel;
+};
+
+template <ResourceValue Value>
     requires std::is_pointer_v<Value>
-struct DefaultPolicySelector<Value> final {
+struct DefaultSentinelSelector<Value> final {
     using Type = Sentinel<nullptr>;
 };
 
-template <typename Value>
-    requires(!std::is_pointer_v<Value> && !DefaultSentinelCustomizable<Value>)
-struct DefaultPolicySelector<Value> final {
-    using Type = NoDefaultSentinel;
+template <ResourceValue Value>
+    requires(!std::is_pointer_v<Value> && DefaultSentinelSpecialized<Value>)
+struct DefaultSentinelSelector<Value> final {
+    using Type = DefaultSentinel<Value>;
 };
 
-template <typename Value>
-    requires(!std::is_pointer_v<Value> && DefaultSentinelAbsent<Value>)
-struct DefaultPolicySelector<Value> final {
-    using Type = NoDefaultSentinel;
-};
+template <ResourceValue Value>
+using DefaultSentinelFor = DefaultSentinelSelector<Value>::Type;
 
-template <typename Value>
-    requires(!std::is_pointer_v<Value> && DefaultSentinelPresent<Value>)
-struct DefaultPolicySelector<Value> final {
-    using Type = Sentinel<DefaultSentinel<Value>::value>;
-};
+} // namespace detail
 
-template <typename Value>
-using DefaultPolicy = DefaultPolicySelector<Value>::Type;
+/// Describes a sentinel representation supported for a resource identity.
+template <typename SentinelType, typename Value>
+concept SentinelFor = ResourceValue<Value> &&
+    (std::same_as<SentinelType, detail::NoSentinel> || detail::DirectSentinelFor<SentinelType, Value> ||
+        detail::ProjectedSentinelFor<SentinelType, Value>);
+
+namespace detail {
 
 template <NothrowMovableObject Type>
 constexpr auto replaceFromMove(Type& target, Type&& source) noexcept -> void {
@@ -121,21 +159,19 @@ constexpr auto replaceFromMove(Type& target, Type&& source) noexcept -> void {
     }
 }
 
-template <typename Value, auto sentinelValue>
-    requires SentinelCompatible<Value, sentinelValue>
+template <ResourceValue Value, DirectSentinelFor<Value> SentinelType>
 constexpr auto replaceWithSentinel(Value& target) noexcept -> void {
     if constexpr (requires {
-                      { target = sentinelValue } noexcept -> std::same_as<Value&>;
+                      { target = SentinelType::value } noexcept -> std::same_as<Value&>;
                   }) {
-        target = sentinelValue;
+        target = SentinelType::value;
     } else {
         std::destroy_at(std::addressof(target));
-        std::construct_at(std::addressof(target), sentinelValue);
+        std::construct_at(std::addressof(target), SentinelType::value);
     }
 }
 
-template <typename Value>
-    requires ResourceValue<Value>
+template <ResourceValue Value>
 class OptionalStorage final {
 public:
     constexpr OptionalStorage() noexcept = default;
@@ -194,12 +230,11 @@ private:
     std::optional<Value> value_;
 };
 
-template <typename Value, auto sentinelValue>
-    requires SentinelCompatible<Value, sentinelValue>
+template <ResourceValue Value, DirectSentinelFor<Value> SentinelType>
 class SentinelStorage final {
 public:
     constexpr SentinelStorage() noexcept
-        : value_{sentinelValue} {}
+        : value_{SentinelType::value} {}
 
     explicit constexpr SentinelStorage(Value const& value)
         requires std::is_copy_constructible_v<Value>
@@ -239,12 +274,12 @@ public:
         assert(owns());
 
         if constexpr (requires(Value& value) {
-                          { std::exchange(value, sentinelValue) } noexcept -> std::same_as<Value>;
+                          { std::exchange(value, SentinelType::value) } noexcept -> std::same_as<Value>;
                       }) {
-            return std::exchange(value_, sentinelValue);
+            return std::exchange(value_, SentinelType::value);
         } else {
             Value value{std::move(value_)};
-            replaceWithSentinel<Value, sentinelValue>(value_);
+            replaceWithSentinel<Value, SentinelType>(value_);
             return value;
         }
     }
@@ -259,10 +294,10 @@ public:
 
 private:
     static constexpr auto isSentinel(Value const& value) noexcept -> bool {
-        return static_cast<bool>(value == sentinelValue);
+        return static_cast<bool>(value == SentinelType::value);
     }
 
-    static constexpr auto emptyValue() noexcept -> Value { return Value{sentinelValue}; }
+    static constexpr auto emptyValue() noexcept -> Value { return Value{SentinelType::value}; }
 
     static constexpr auto canonicalize(Value const& value) -> Value
         requires std::is_copy_constructible_v<Value>
@@ -293,20 +328,9 @@ private:
     Value value_;
 };
 
-template <typename Value, auto projection, auto sentinelValue>
-concept ProjectedSentinelCompatible = ResourceValue<Value> && std::is_member_object_pointer_v<decltype(projection)> &&
-    requires(Value& value, Value const& constValue) {
-        requires std::is_lvalue_reference_v<decltype(std::invoke(projection, value))>;
-        requires(!std::is_const_v<std::remove_reference_t<decltype(std::invoke(projection, value))>>);
-        requires(!std::is_volatile_v<std::remove_reference_t<decltype(std::invoke(projection, value))>>);
-        requires SentinelCompatible<std::remove_cvref_t<decltype(std::invoke(projection, value))>, sentinelValue>;
-        { std::invoke(projection, constValue) == sentinelValue } noexcept -> std::convertible_to<bool>;
-    };
-
-template <typename Value, auto projection, auto sentinelValue>
+template <ResourceValue Value, auto projection, auto sentinelValue>
     requires ProjectedSentinelCompatible<Value, projection, sentinelValue>
 class ProjectedSentinelStorage final {
-private:
     using ProjectedValue = std::remove_cvref_t<decltype(std::invoke(projection, std::declval<Value&>()))>;
 
 public:
@@ -409,44 +433,33 @@ private:
     }
 
     static constexpr auto disengage(Value& value) noexcept -> void {
-        replaceWithSentinel<ProjectedValue, sentinelValue>(projected(value));
+        replaceWithSentinel<ProjectedValue, Sentinel<sentinelValue>>(projected(value));
     }
 
     Value value_;
 };
 
-template <typename Value, typename Disengagement>
+template <ResourceValue Value, typename SentinelType>
 struct StorageFor;
 
-template <typename Value>
-    requires ResourceValue<Value>
-struct StorageFor<Value, NoDefaultSentinel> final {
+template <ResourceValue Value>
+struct StorageFor<Value, NoSentinel> final {
     using Type = OptionalStorage<Value>;
 };
 
-template <typename Value, auto sentinelValue>
-    requires SentinelCompatible<Value, sentinelValue>
-struct StorageFor<Value, Sentinel<sentinelValue>> final {
-    using Type = SentinelStorage<Value, sentinelValue>;
+template <ResourceValue Value, DirectSentinelFor<Value> SentinelType>
+struct StorageFor<Value, SentinelType> final {
+    using Type = SentinelStorage<Value, SentinelType>;
 };
 
-template <typename Value, auto projection, auto sentinelValue>
+template <ResourceValue Value, auto projection, auto sentinelValue>
     requires ProjectedSentinelCompatible<Value, projection, sentinelValue>
 struct StorageFor<Value, ProjectedSentinel<projection, sentinelValue>> final {
     using Type = ProjectedSentinelStorage<Value, projection, sentinelValue>;
 };
 
-template <typename Value, typename Disengagement>
-concept StoragePolicy = requires { typename StorageFor<Value, Disengagement>::Type; };
-
-template <typename Value, typename Disengagement>
-    requires StoragePolicy<Value, Disengagement>
-using StorageForT = StorageFor<Value, Disengagement>::Type;
-
-template <typename Deleter, typename Value>
-concept ResourceDeleter = NothrowMovableObject<Deleter> && requires(Deleter& deleter, Value const& value) {
-    { std::invoke(deleter, value) } noexcept -> std::same_as<void>;
-};
+template <ResourceValue Value, SentinelFor<Value> SentinelType>
+using StorageForT = StorageFor<Value, SentinelType>::Type;
 
 template <typename Value>
 concept NothrowEqualityComparable = requires(Value const& left, Value const& right) {
@@ -456,12 +469,11 @@ concept NothrowEqualityComparable = requires(Value const& left, Value const& rig
 } // namespace detail
 
 /// Owns one external resource identity and destroys it with an explicit deleter.
-template <typename Value, typename Deleter, typename Disengagement = detail::DefaultPolicy<Value>>
-    requires detail::ResourceValue<Value> && detail::ResourceDeleter<Deleter, Value> &&
-    detail::StoragePolicy<Value, Disengagement>
+template <ResourceValue Value, ResourceDeleter<Value> Deleter,
+    SentinelFor<Value> SentinelType = detail::DefaultSentinelFor<Value>>
 class Resource final {
 private:
-    using Storage = detail::StorageForT<Value, Disengagement>;
+    using Storage = detail::StorageForT<Value, SentinelType>;
 
 public:
     constexpr Resource() noexcept
@@ -484,12 +496,12 @@ public:
         : deleter_{std::move(deleter)},
           storage_{std::move(value)} {}
 
-    constexpr Resource(Value const& value, Deleter deleter, Disengagement) noexcept(
+    constexpr Resource(Value const& value, Deleter deleter, SentinelType) noexcept(
         std::is_nothrow_copy_constructible_v<Value>)
         requires std::is_copy_constructible_v<Value>
         : Resource{value, std::move(deleter)} {}
 
-    constexpr Resource(Value&& value, Deleter deleter, Disengagement) noexcept
+    constexpr Resource(Value&& value, Deleter deleter, SentinelType) noexcept
         : Resource{std::move(value), std::move(deleter)} {}
 
     constexpr Resource(Resource const&) = delete;
@@ -586,10 +598,10 @@ private:
     Storage storage_;
 };
 
-template <typename Value, typename Deleter>
+template <ResourceValue Value, ResourceDeleter<Value> Deleter>
 Resource(Value, Deleter) -> Resource<Value, Deleter>;
 
-template <typename Value, typename Deleter, typename Disengagement>
-Resource(Value, Deleter, Disengagement) -> Resource<Value, Deleter, Disengagement>;
+template <ResourceValue Value, ResourceDeleter<Value> Deleter, SentinelFor<Value> SentinelType>
+Resource(Value, Deleter, SentinelType) -> Resource<Value, Deleter, SentinelType>;
 
 } // namespace resource
