@@ -1,0 +1,15 @@
+# IDE and editor state.
+/.cache/
+/.idea/
+/.qtcreator/
+/.vs/
+/.vscode/
+CMakeLists.txt.user
+*.vcxproj.user
+
+# Local build trees.
+/build/
+/out/
+
+# Local CMake configuration.
+/CMakeUserPresets.json

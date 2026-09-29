@@ -1,0 +1,29 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug (lldb)",
+            "type": "lldb",
+            "request": "launch",
+            "program": "${command:cmake.launchTargetPath}",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "GTEST_COLOR": "1"
+            },
+            "preLaunchTask": "CMake: build"
+        },
+        {
+            "name": "Debug (gdb)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${command:cmake.launchTargetPath}",
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "CMake: build",
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb",
+            "stopAtEntry": false
+        }
+    ]
+}

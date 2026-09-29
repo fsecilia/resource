@@ -1,0 +1,57 @@
+---
+# canonical tool: clang-format 17.0.6
+BasedOnStyle: LLVM
+Language: Cpp
+
+# indentation and width
+ColumnLimit: 120
+IndentWidth: 4
+ContinuationIndentWidth: 4
+TabWidth: 4
+UseTab: Never
+AccessModifierOffset: -4
+IndentCaseLabels: true
+IndentRequiresClause: true
+
+# alignment
+AlignAfterOpenBracket: DontAlign
+AlignArrayOfStructures: None
+AlignConsecutiveAssignments: None
+AlignConsecutiveBitFields: None
+AlignConsecutiveDeclarations: None
+AlignConsecutiveMacros: None
+AlignConsecutiveShortCaseStatements:
+  Enabled: false
+AlignEscapedNewlines: DontAlign
+AlignOperands: DontAlign
+AlignTrailingComments: false
+PointerAlignment: Left
+ReferenceAlignment: Pointer
+QualifierAlignment: Right
+
+# braces
+BreakBeforeBraces: Attach
+
+# compact forms
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: InlineOnly
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: All
+AllowShortLoopsOnASingleLine: false
+
+# line breaking
+AlwaysBreakTemplateDeclarations: Yes
+BreakStringLiterals: false
+PackConstructorInitializers: Never
+
+# includes
+IncludeIsMainRegex: '(_test)?$'
+IncludeCategories:
+  - Regex: '.*'
+    Priority: 1
+SortIncludes: CaseSensitive
+
+# misc
+InsertNewlineAtEOF: true
+Standard: Latest
