@@ -57,14 +57,14 @@ template <auto sentinelValue>
 inline constexpr Sentinel<sentinelValue> sentinel{};
 
 /// Describes an in-band sentinel in one member of a compound resource identity.
-template <auto projection, auto sentinelValue>
+template <auto projection, typename SentinelType>
     requires std::is_member_object_pointer_v<decltype(projection)>
 struct ProjectedSentinel final {};
 
 /// Tag object for selecting an explicit projected sentinel through CTAD.
 template <auto projection, auto sentinelValue>
     requires std::is_member_object_pointer_v<decltype(projection)>
-inline constexpr ProjectedSentinel<projection, sentinelValue> projectedSentinel{};
+inline constexpr ProjectedSentinel<projection, Sentinel<sentinelValue>> projectedSentinel{};
 
 /// Customizes the intrinsic sentinel for a distinct class or enum resource identity.
 ///
@@ -106,23 +106,22 @@ template <typename SentinelType, typename Value>
 concept DirectSentinelFor = (ExplicitSentinel<SentinelType> || DefaultSentinelForValue<SentinelType, Value>) &&
     DirectSentinelCompatible<Value, SentinelType>;
 
-template <typename Value, auto projection, auto sentinelValue>
+template <typename Value, auto projection, typename SentinelType>
 concept ProjectedSentinelCompatible = ResourceValue<Value> && std::is_member_object_pointer_v<decltype(projection)> &&
     requires(Value& value, Value const& constValue) {
         requires std::is_lvalue_reference_v<decltype(std::invoke(projection, value))>;
         requires(!std::is_const_v<std::remove_reference_t<decltype(std::invoke(projection, value))>>);
         requires(!std::is_volatile_v<std::remove_reference_t<decltype(std::invoke(projection, value))>>);
-        requires DirectSentinelCompatible<std::remove_cvref_t<decltype(std::invoke(projection, value))>,
-            Sentinel<sentinelValue>>;
-        { std::invoke(projection, constValue) == sentinelValue } noexcept -> std::convertible_to<bool>;
+        requires DirectSentinelFor<SentinelType, std::remove_cvref_t<decltype(std::invoke(projection, value))>>;
+        { std::invoke(projection, constValue) == SentinelType::value } noexcept -> std::convertible_to<bool>;
     };
 
 template <typename SentinelType, typename Value>
 struct IsProjectedSentinelFor final : std::false_type {};
 
-template <auto projection, auto sentinelValue, typename Value>
-struct IsProjectedSentinelFor<ProjectedSentinel<projection, sentinelValue>, Value> final
-    : std::bool_constant<ProjectedSentinelCompatible<Value, projection, sentinelValue>> {};
+template <auto projection, typename ProjectedSentinelType, typename Value>
+struct IsProjectedSentinelFor<ProjectedSentinel<projection, ProjectedSentinelType>, Value> final
+    : std::bool_constant<ProjectedSentinelCompatible<Value, projection, ProjectedSentinelType>> {};
 
 template <typename SentinelType, typename Value>
 concept ProjectedSentinelFor = IsProjectedSentinelFor<SentinelType, Value>::value;
@@ -336,8 +335,8 @@ private:
     Value value_;
 };
 
-template <ResourceValue Value, auto projection, auto sentinelValue>
-    requires ProjectedSentinelCompatible<Value, projection, sentinelValue>
+template <ResourceValue Value, auto projection, typename SentinelType>
+    requires ProjectedSentinelCompatible<Value, projection, SentinelType>
 class ProjectedSentinelStorage final {
     using ProjectedValue = std::remove_cvref_t<decltype(std::invoke(projection, std::declval<Value&>()))>;
 
@@ -437,11 +436,11 @@ private:
     }
 
     static constexpr auto isSentinel(Value const& value) noexcept -> bool {
-        return static_cast<bool>(projected(value) == sentinelValue);
+        return static_cast<bool>(projected(value) == SentinelType::value);
     }
 
     static constexpr auto disengage(Value& value) noexcept -> void {
-        replaceWithSentinel<ProjectedValue, Sentinel<sentinelValue>>(projected(value));
+        replaceWithSentinel<ProjectedValue, SentinelType>(projected(value));
     }
 
     Value value_;
@@ -460,10 +459,10 @@ struct StorageFor<Value, SentinelType> final {
     using Type = SentinelStorage<Value, SentinelType>;
 };
 
-template <ResourceValue Value, auto projection, auto sentinelValue>
-    requires ProjectedSentinelCompatible<Value, projection, sentinelValue>
-struct StorageFor<Value, ProjectedSentinel<projection, sentinelValue>> final {
-    using Type = ProjectedSentinelStorage<Value, projection, sentinelValue>;
+template <ResourceValue Value, auto projection, typename ProjectedSentinelType>
+    requires ProjectedSentinelCompatible<Value, projection, ProjectedSentinelType>
+struct StorageFor<Value, ProjectedSentinel<projection, ProjectedSentinelType>> final {
+    using Type = ProjectedSentinelStorage<Value, projection, ProjectedSentinelType>;
 };
 
 template <ResourceValue Value, SentinelFor<Value> SentinelType>

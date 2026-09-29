@@ -57,6 +57,15 @@ struct DeleteOpaque final {
     constexpr auto operator()(OpaqueHandle const&) const noexcept -> void {}
 };
 
+struct OpaqueCompound final {
+    int parent;
+    OpaqueHandle handle;
+};
+
+struct DeleteOpaqueCompound final {
+    constexpr auto operator()(OpaqueCompound const&) const noexcept -> void {}
+};
+
 struct PlainHandle final {
     int value;
 };
@@ -279,8 +288,8 @@ concept ResourceFormable = requires { typename Resource<Value, Deleter, Sentinel
 template <typename Value>
 concept DefaultSentinelNameable = requires { typename DefaultSentinel<Value>; };
 
-template <auto projection, auto sentinelValue>
-concept ProjectedSentinelNameable = requires { typename ProjectedSentinel<projection, sentinelValue>; };
+template <auto projection, typename SentinelType>
+concept ProjectedSentinelNameable = requires { typename ProjectedSentinel<projection, SentinelType>; };
 
 constexpr auto deleteInt(int const&) noexcept -> void {
 }
@@ -311,15 +320,17 @@ namespace {
 
 using PointerResource = Resource<int*, EmptyPointerDelete>;
 using OpaqueResource = Resource<OpaqueHandle, DeleteOpaque>;
+using OpaqueCompoundPolicy = ProjectedSentinel<&OpaqueCompound::handle, DefaultSentinel<OpaqueHandle>>;
+using OpaqueCompoundResource = Resource<OpaqueCompound, DeleteOpaqueCompound, OpaqueCompoundPolicy>;
 using FunctionDelete = void (*)(int const&) noexcept;
 using FunctionDeleteResource = Resource<int, FunctionDelete>;
 using MemberDelete = void (MemberDeletedValue::*)() const noexcept;
 using MemberDeleteResource = Resource<MemberDeletedValue, MemberDelete>;
-using CompoundPolicy = ProjectedSentinel<&Compound::handle, StrongHandle{-1}>;
+using CompoundPolicy = ProjectedSentinel<&Compound::handle, Sentinel<StrongHandle{-1}>>;
 using CompoundResource = Resource<Compound, DestroyCompound, CompoundPolicy>;
-using NonDefaultCompoundPolicy = ProjectedSentinel<&NonDefaultCompound::handle, -1>;
+using NonDefaultCompoundPolicy = ProjectedSentinel<&NonDefaultCompound::handle, Sentinel<-1>>;
 using NonDefaultCompoundResource = Resource<NonDefaultCompound, DestroyNonDefaultCompound, NonDefaultCompoundPolicy>;
-using MoveChangingPolicy = ProjectedSentinel<&MoveChangingCompound::handle, MoveChangingHandle{-1}>;
+using MoveChangingPolicy = ProjectedSentinel<&MoveChangingCompound::handle, Sentinel<MoveChangingHandle{-1}>>;
 using MoveChangingResource = Resource<MoveChangingCompound, DestroyMoveChangingCompound, MoveChangingPolicy>;
 using MoveChangingScalarResource =
     Resource<MoveChangingHandle, DestroyMoveChangingHandle, Sentinel<MoveChangingHandle{-1}>>;
@@ -328,6 +339,7 @@ using NonAssignableMoveChangingResource = Resource<NonAssignableMoveChangingHand
 
 static_assert(sizeof(PointerResource) == sizeof(int*));
 static_assert(sizeof(OpaqueResource) == sizeof(OpaqueHandle));
+static_assert(sizeof(OpaqueCompoundResource) == sizeof(OpaqueCompound));
 static_assert(!std::copy_constructible<PointerResource>);
 static_assert(!std::is_copy_assignable_v<PointerResource>);
 static_assert(std::is_nothrow_move_constructible_v<PointerResource>);
@@ -355,8 +367,8 @@ static_assert(!DefaultSentinelNameable<int*>);
 static_assert(DefaultSentinelNameable<StrongHandle>);
 static_assert(DefaultSentinelNameable<EnumHandle>);
 static_assert(DefaultSentinelNameable<OpaqueHandle>);
-static_assert(ProjectedSentinelNameable<&IntCompound::handle, -1>);
-static_assert(!ProjectedSentinelNameable<nullptr, -1>);
+static_assert(ProjectedSentinelNameable<&IntCompound::handle, Sentinel<-1>>);
+static_assert(!ProjectedSentinelNameable<nullptr, Sentinel<-1>>);
 
 static_assert(!DefaultResourceFormable<int, ReturningDelete>);
 static_assert(!DefaultResourceFormable<int, ThrowingDelete>);
@@ -382,6 +394,12 @@ static_assert(std::is_move_assignable_v<Resource<OptionalNonAssignable, DeleteOp
 
 TEST(ResourceTest, PointerNullIsDisengagedByDefault) {
     auto resource = Resource{static_cast<int*>(nullptr), EmptyPointerDelete{}};
+
+    EXPECT_FALSE(resource);
+}
+
+TEST(ResourceTest, ProjectedDefaultSentinelSupportsNonStructuralHandle) {
+    auto resource = OpaqueCompoundResource{OpaqueCompound{31, OpaqueHandle{-1}}, DeleteOpaqueCompound{}};
 
     EXPECT_FALSE(resource);
 }
