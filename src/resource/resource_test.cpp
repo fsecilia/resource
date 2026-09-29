@@ -541,7 +541,7 @@ TEST(ResourceTest, MoveConstructionDisengagesSource) {
 }
 
 TEST(ResourceTest, MoveAssignmentDestroysWithDestinationDeleter) {
-    DeleteLog log{};
+    auto log = DeleteLog{};
     auto destination = Resource{5, LoggingDelete{11, &log}, sentinel<-1>};
     auto source = Resource{7, LoggingDelete{17, &log}, sentinel<-1>};
 
@@ -551,7 +551,7 @@ TEST(ResourceTest, MoveAssignmentDestroysWithDestinationDeleter) {
 }
 
 TEST(ResourceTest, MoveAssignmentTransfersSourceDeleter) {
-    DeleteLog log{};
+    auto log = DeleteLog{};
     auto destination = Resource{5, LoggingDelete{11, &log}, sentinel<-1>};
     auto source = Resource{7, LoggingDelete{17, &log}, sentinel<-1>};
 
@@ -562,7 +562,7 @@ TEST(ResourceTest, MoveAssignmentTransfersSourceDeleter) {
 }
 
 TEST(ResourceTest, MoveAssignmentDisengagesSource) {
-    DeleteLog log{};
+    auto log = DeleteLog{};
     auto destination = Resource{5, LoggingDelete{11, &log}, sentinel<-1>};
     auto source = Resource{7, LoggingDelete{17, &log}, sentinel<-1>};
 

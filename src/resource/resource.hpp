@@ -216,7 +216,7 @@ public:
     constexpr auto release() noexcept -> Value {
         assert(owns());
 
-        Value value{std::move(*value_)};
+        auto value = Value{std::move(*value_)};
         value_.reset();
         return value;
     }
@@ -278,7 +278,7 @@ public:
                       }) {
             return std::exchange(value_, SentinelType::value);
         } else {
-            Value value{std::move(value_)};
+            auto value = Value{std::move(value_)};
             replaceWithSentinel<Value, SentinelType>(value_);
             return value;
         }
@@ -381,7 +381,7 @@ public:
     constexpr auto release() noexcept -> Value {
         assert(owns());
 
-        Value value{std::move(value_)};
+        auto value = Value{std::move(value_)};
         disengage(value_);
         return value;
     }
@@ -557,7 +557,7 @@ public:
             return;
         }
 
-        Value value{storage_.release()};
+        auto value = storage_.release();
         std::invoke(deleter_, value);
     }
 
@@ -569,7 +569,7 @@ public:
     {
         assertNotSelfReset(value);
 
-        Storage incoming{value};
+        auto incoming = Storage{value};
         reset();
         storage_ = std::move(incoming);
     }
@@ -580,7 +580,7 @@ public:
     constexpr auto reset(Value&& value) noexcept -> void {
         assertNotSelfReset(value);
 
-        Storage incoming{std::move(value)};
+        auto incoming = Storage{std::move(value)};
         reset();
         storage_ = std::move(incoming);
     }
