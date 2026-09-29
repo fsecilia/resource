@@ -65,6 +65,20 @@ struct DeletePlain final {
     constexpr auto operator()(PlainHandle const&) const noexcept -> void {}
 };
 
+struct CoarselyEqualHandle final {
+    int value;
+
+    friend constexpr auto operator==(CoarselyEqualHandle const&, CoarselyEqualHandle const&) noexcept -> bool {
+        return true;
+    }
+};
+
+struct RecordCoarselyEqualDelete final {
+    int* deletedValue;
+
+    constexpr auto operator()(CoarselyEqualHandle const& value) const noexcept -> void { *deletedValue = value.value; }
+};
+
 enum class EnumHandle : int {
     invalid = -1,
     valid = 7,
@@ -416,6 +430,16 @@ TEST(ResourceTest, ResetDoesNotRequireEqualityComparison) {
 
     resource.reset(PlainHandle{9});
 
+    EXPECT_EQ(resource.get().value, 9);
+}
+
+TEST(ResourceTest, ResetDoesNotUseValueEqualityAsResourceIdentity) {
+    auto deletedValue = 0;
+    auto resource = Resource{CoarselyEqualHandle{7}, RecordCoarselyEqualDelete{&deletedValue}};
+
+    resource.reset(CoarselyEqualHandle{9});
+
+    EXPECT_EQ(deletedValue, 7);
     EXPECT_EQ(resource.get().value, 9);
 }
 

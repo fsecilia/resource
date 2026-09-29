@@ -28,10 +28,18 @@ concept NothrowMovableObject =
 } // namespace detail
 
 /// Describes a type that can represent an owned external resource identity.
+///
+/// Moving a value, by construction or assignment when supported, must make the
+/// destination identify the same external resource that the source identified
+/// before the move. The moved-from representation may change.
 template <typename Value>
 concept ResourceValue = detail::NothrowMovableObject<Value>;
 
-/// Describes a deleter that destroys a resource identity without throwing.
+/// Describes a deleter that destroys the external resource identified by a value
+/// without throwing.
+///
+/// Moving a deleter, by construction or assignment when supported, must preserve
+/// that cleanup behavior in the destination.
 template <typename Deleter, typename Value>
 concept ResourceDeleter =
     ResourceValue<Value> && detail::NothrowMovableObject<Deleter> && requires(Deleter& deleter, Value const& value) {
@@ -461,11 +469,6 @@ struct StorageFor<Value, ProjectedSentinel<projection, sentinelValue>> final {
 template <ResourceValue Value, SentinelFor<Value> SentinelType>
 using StorageForT = StorageFor<Value, SentinelType>::Type;
 
-template <typename Value>
-concept NothrowEqualityComparable = requires(Value const& left, Value const& right) {
-    { left == right } noexcept -> std::convertible_to<bool>;
-};
-
 } // namespace detail
 
 /// Owns one external resource identity and destroys it with an explicit deleter.
@@ -564,11 +567,12 @@ public:
     /// Replaces the owned identity with a copy of `value`.
     ///
     /// The replacement is established before the old resource is destroyed.
+    ///
+    /// \pre If this object owns a resource, `value` does not identify that same
+    /// external resource.
     constexpr auto reset(Value const& value) noexcept(std::is_nothrow_copy_constructible_v<Value>) -> void
         requires std::is_copy_constructible_v<Value>
     {
-        assertNotSelfReset(value);
-
         auto incoming = Storage{value};
         reset();
         storage_ = std::move(incoming);
@@ -577,23 +581,16 @@ public:
     /// Replaces the owned identity with `value`.
     ///
     /// The replacement is established before the old resource is destroyed.
+    ///
+    /// \pre If this object owns a resource, `value` does not identify that same
+    /// external resource.
     constexpr auto reset(Value&& value) noexcept -> void {
-        assertNotSelfReset(value);
-
         auto incoming = Storage{std::move(value)};
         reset();
         storage_ = std::move(incoming);
     }
 
 private:
-    constexpr auto assertNotSelfReset([[maybe_unused]] Value const& value) const noexcept -> void {
-        if constexpr (detail::NothrowEqualityComparable<Value>) {
-            if (owns()) {
-                assert(!static_cast<bool>(value == get()));
-            }
-        }
-    }
-
     [[no_unique_address]] Deleter deleter_;
     Storage storage_;
 };
