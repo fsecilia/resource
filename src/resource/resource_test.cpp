@@ -258,7 +258,7 @@ struct ReturningDelete final {
     constexpr auto operator()(int const&) const noexcept -> int { return 0; }
 };
 
-struct ThrowingDelete final {
+struct PotentiallyThrowingInvokeDelete final {
     auto operator()(int const&) const -> void {}
 };
 
@@ -508,8 +508,8 @@ static_assert(
 static_assert(ResourceFormable<IntCompound, DeleteAny<IntCompound>, NonNegativeCompoundEngagement>);
 static_assert(EngagementFor<OpaqueCompoundEngagement, OpaqueCompound>);
 
-static_assert(!DefaultResourceFormable<int, ReturningDelete>);
-static_assert(!DefaultResourceFormable<int, ThrowingDelete>);
+static_assert(DefaultResourceFormable<int, ReturningDelete>);
+static_assert(DefaultResourceFormable<int, PotentiallyThrowingInvokeDelete>);
 static_assert(!DefaultResourceFormable<ThrowingMoveValue, DeleteThrowingMoveValue>);
 static_assert(MalformedHandle{-1} == MalformedHandle{-1});
 static_assert(!DefaultResourceFormable<MalformedHandle, DeleteMalformed>);

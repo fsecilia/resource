@@ -37,16 +37,14 @@ concept NothrowMovableObject =
 template <typename Value>
 concept ResourceValue = detail::NothrowMovableObject<Value>;
 
-/// Describes a deleter that destroys the external resource identified by a value
-/// without throwing.
+/// Describes a deleter that destroys the external resource identified by a value.
 ///
-/// Moving a deleter, by construction or assignment when supported, must preserve
-/// that cleanup behavior in the destination.
+/// An exception must not escape when Resource invokes the deleter. Moving a deleter,
+/// by construction or assignment when supported, must preserve that cleanup behavior
+/// in the destination.
 template <typename Deleter, typename Value>
-concept ResourceDeleter =
-    ResourceValue<Value> && detail::NothrowMovableObject<Deleter> && requires(Deleter& deleter, Value const& value) {
-        { std::invoke(deleter, value) } noexcept -> std::same_as<void>;
-    };
+concept ResourceDeleter = ResourceValue<Value> && detail::NothrowMovableObject<Deleter> &&
+    requires(Deleter& deleter, Value const& value) { std::invoke(deleter, value); };
 
 /// Describes engagement through equality with one in-band sentinel value.
 template <auto sentinelValue>
