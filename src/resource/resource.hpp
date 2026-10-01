@@ -368,34 +368,35 @@ public:
         : deleter_{},
           storage_{} {}
 
-    template <typename D>
-        requires std::is_nothrow_constructible_v<Deleter, D&&> && std::is_nothrow_default_constructible_v<Storage>
-    explicit constexpr Resource(D&& deleter) noexcept
-        : deleter_{std::forward<D>(deleter)},
+    template <typename DeleterArg>
+        requires std::is_nothrow_constructible_v<Deleter, DeleterArg&&> &&
+                     std::is_nothrow_default_constructible_v<Storage>
+    explicit constexpr Resource(DeleterArg&& deleter) noexcept
+        : deleter_{std::forward<DeleterArg>(deleter)},
           storage_{} {}
 
-    template <typename D>
-        requires std::is_copy_constructible_v<Value> && std::is_nothrow_constructible_v<Deleter, D&&>
-    constexpr Resource(Value const& value, D&& deleter) noexcept(std::is_nothrow_copy_constructible_v<Value>)
-        : deleter_{std::forward<D>(deleter)},
+    template <typename DeleterArg>
+        requires std::is_copy_constructible_v<Value> && std::is_nothrow_constructible_v<Deleter, DeleterArg&&>
+    constexpr Resource(Value const& value, DeleterArg&& deleter) noexcept(std::is_nothrow_copy_constructible_v<Value>)
+        : deleter_{std::forward<DeleterArg>(deleter)},
           storage_{value} {}
 
-    template <typename D>
-        requires std::is_nothrow_constructible_v<Deleter, D&&>
-    constexpr Resource(Value&& value, D&& deleter) noexcept
-        : deleter_{std::forward<D>(deleter)},
+    template <typename DeleterArg>
+        requires std::is_nothrow_constructible_v<Deleter, DeleterArg&&>
+    constexpr Resource(Value&& value, DeleterArg&& deleter) noexcept
+        : deleter_{std::forward<DeleterArg>(deleter)},
           storage_{std::move(value)} {}
 
-    template <typename D>
-        requires std::is_copy_constructible_v<Value> && std::is_nothrow_constructible_v<Deleter, D&&>
-    constexpr Resource(Value const& value, D&& deleter, Engagement) noexcept(
+    template <typename DeleterArg>
+        requires std::is_copy_constructible_v<Value> && std::is_nothrow_constructible_v<Deleter, DeleterArg&&>
+    constexpr Resource(Value const& value, DeleterArg&& deleter, Engagement) noexcept(
         std::is_nothrow_copy_constructible_v<Value>)
-        : Resource{value, std::forward<D>(deleter)} {}
+        : Resource{value, std::forward<DeleterArg>(deleter)} {}
 
-    template <typename D>
-        requires std::is_nothrow_constructible_v<Deleter, D&&>
-    constexpr Resource(Value&& value, D&& deleter, Engagement) noexcept
-        : Resource{std::move(value), std::forward<D>(deleter)} {}
+    template <typename DeleterArg>
+        requires std::is_nothrow_constructible_v<Deleter, DeleterArg&&>
+    constexpr Resource(Value&& value, DeleterArg&& deleter, Engagement) noexcept
+        : Resource{std::move(value), std::forward<DeleterArg>(deleter)} {}
 
     constexpr Resource(Resource const&) = delete;
     constexpr auto operator=(Resource const&) -> Resource& = delete;
