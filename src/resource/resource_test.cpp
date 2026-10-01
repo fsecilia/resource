@@ -10,6 +10,7 @@
 
 #include <concepts>
 #include <cstddef>
+#include <cstdlib>
 #include <type_traits>
 #include <utility>
 
@@ -29,6 +30,14 @@ struct CountDelete final {
 struct NoopDelete final {
     constexpr auto operator()(int const&) const noexcept -> void {}
 };
+
+struct NonNegativeEngagement final {
+    static constexpr auto engaged(int value) noexcept -> bool { return value >= 0; }
+
+    static constexpr auto disengage(int& value) noexcept -> void { value = -1; }
+};
+
+static_assert(EngagementFor<NonNegativeEngagement, int>);
 
 struct StrongHandle final {
     int value;
@@ -82,6 +91,8 @@ struct CoarselyEqualHandle final {
     }
 };
 
+static_assert(CoarselyEqualHandle{7} == CoarselyEqualHandle{9});
+
 struct RecordCoarselyEqualDelete final {
     int* deletedValue;
 
@@ -107,6 +118,14 @@ struct DeleteMalformed final {
     constexpr auto operator()(MalformedHandle const&) const noexcept -> void {}
 };
 
+struct MissingSentinelValueHandle final {
+    int value;
+};
+
+struct DeleteMissingSentinelValue final {
+    constexpr auto operator()(MissingSentinelValueHandle const&) const noexcept -> void {}
+};
+
 struct Compound final {
     int parent;
     StrongHandle handle;
@@ -125,6 +144,25 @@ struct IntCompound final {
 
 struct DestroyIntCompound final {
     constexpr auto operator()(IntCompound const&) const noexcept -> void {}
+};
+
+struct ConstIntCompound final {
+    int parent;
+    int const handle;
+};
+
+struct VolatileIntCompound final {
+    int parent;
+    int volatile handle;
+};
+
+struct UnrelatedIntCompound final {
+    int handle;
+};
+
+template <typename Value>
+struct DeleteAny final {
+    constexpr auto operator()(Value const&) const noexcept -> void {}
 };
 
 struct NonDefaultCompound final {
@@ -160,28 +198,13 @@ struct DeleteNonAssignable final {
     constexpr auto operator()(NonAssignable const&) const noexcept -> void {}
 };
 
-struct NonAssignableMoveChangingHandle final {
-    int value;
-
-    constexpr explicit NonAssignableMoveChangingHandle(int initialValue) noexcept
-        : value{initialValue} {}
-
-    constexpr NonAssignableMoveChangingHandle(NonAssignableMoveChangingHandle const&) noexcept = default;
-
-    constexpr NonAssignableMoveChangingHandle(NonAssignableMoveChangingHandle&& source) noexcept
-        : value{source.value == -1 ? 99 : source.value} {
-        source.value = 77;
-    }
-
-    constexpr auto operator=(NonAssignableMoveChangingHandle const&) -> NonAssignableMoveChangingHandle& = delete;
-    constexpr auto operator=(NonAssignableMoveChangingHandle&&) -> NonAssignableMoveChangingHandle& = delete;
-
-    friend constexpr auto operator==(
-        NonAssignableMoveChangingHandle const&, NonAssignableMoveChangingHandle const&) noexcept -> bool = default;
+struct NonAssignableCompound final {
+    int parent;
+    NonAssignable handle;
 };
 
-struct DeleteNonAssignableMoveChangingHandle final {
-    constexpr auto operator()(NonAssignableMoveChangingHandle const&) const noexcept -> void {}
+struct DeleteNonAssignableCompound final {
+    constexpr auto operator()(NonAssignableCompound const&) const noexcept -> void {}
 };
 
 struct OptionalNonAssignable final {
@@ -240,6 +263,27 @@ struct ThrowingDelete final {
     auto operator()(int const&) const -> void {}
 };
 
+struct PotentiallyThrowingCopyDelete final {
+    PotentiallyThrowingCopyDelete() = default;
+    PotentiallyThrowingCopyDelete(PotentiallyThrowingCopyDelete const&) noexcept(false) {}
+    PotentiallyThrowingCopyDelete(PotentiallyThrowingCopyDelete&&) noexcept = default;
+
+    constexpr auto operator()(int const&) const noexcept -> void {}
+};
+
+using PotentiallyThrowingCopyOwner = Resource<int, PotentiallyThrowingCopyDelete>;
+using PotentiallyThrowingCopySentinelOwner = Resource<int, PotentiallyThrowingCopyDelete, Sentinel<-1>>;
+
+static_assert(ResourceDeleter<PotentiallyThrowingCopyDelete, int>);
+static_assert(!std::is_constructible_v<PotentiallyThrowingCopyOwner, PotentiallyThrowingCopyDelete&>);
+static_assert(std::is_nothrow_constructible_v<PotentiallyThrowingCopyOwner, PotentiallyThrowingCopyDelete&&>);
+static_assert(!std::is_constructible_v<PotentiallyThrowingCopyOwner, int, PotentiallyThrowingCopyDelete&>);
+static_assert(std::is_nothrow_constructible_v<PotentiallyThrowingCopyOwner, int, PotentiallyThrowingCopyDelete&&>);
+static_assert(
+    !std::is_constructible_v<PotentiallyThrowingCopySentinelOwner, int, PotentiallyThrowingCopyDelete&, Sentinel<-1>>);
+static_assert(std::is_nothrow_constructible_v<PotentiallyThrowingCopySentinelOwner, int,
+    PotentiallyThrowingCopyDelete&&, Sentinel<-1>>);
+
 struct ThrowingMoveValue final {
     ThrowingMoveValue() = default;
     ThrowingMoveValue(ThrowingMoveValue const&) = default;
@@ -271,6 +315,73 @@ struct LoggingDelete final {
     }
 };
 
+enum class DeleterMoveOperation {
+    none,
+    construction,
+    assignment,
+};
+
+struct NothrowMoveAssignableDelete final {
+    DeleterMoveOperation* operation;
+
+    constexpr explicit NothrowMoveAssignableDelete(DeleterMoveOperation* observedOperation) noexcept
+        : operation{observedOperation} {}
+
+    constexpr NothrowMoveAssignableDelete(NothrowMoveAssignableDelete&& source) noexcept
+        : operation{source.operation} {
+        *operation = DeleterMoveOperation::construction;
+    }
+
+    constexpr auto operator=(NothrowMoveAssignableDelete&& source) noexcept -> NothrowMoveAssignableDelete& {
+        operation = source.operation;
+        *operation = DeleterMoveOperation::assignment;
+        return *this;
+    }
+
+    constexpr auto operator()(int const&) const noexcept -> void {}
+};
+
+struct NonMoveAssignableDelete final {
+    DeleterMoveOperation* operation;
+
+    constexpr explicit NonMoveAssignableDelete(DeleterMoveOperation* observedOperation) noexcept
+        : operation{observedOperation} {}
+
+    constexpr NonMoveAssignableDelete(NonMoveAssignableDelete&& source) noexcept
+        : operation{source.operation} {
+        *operation = DeleterMoveOperation::construction;
+    }
+
+    constexpr auto operator=(NonMoveAssignableDelete&&) -> NonMoveAssignableDelete& = delete;
+
+    constexpr auto operator()(int const&) const noexcept -> void {}
+};
+
+struct ThrowingMoveAssignableDelete final {
+    DeleterMoveOperation* operation;
+
+    constexpr explicit ThrowingMoveAssignableDelete(DeleterMoveOperation* observedOperation) noexcept
+        : operation{observedOperation} {}
+
+    constexpr ThrowingMoveAssignableDelete(ThrowingMoveAssignableDelete&& source) noexcept
+        : operation{source.operation} {
+        *operation = DeleterMoveOperation::construction;
+    }
+
+    constexpr auto operator=(ThrowingMoveAssignableDelete&& source) noexcept(false) -> ThrowingMoveAssignableDelete& {
+        operation = source.operation;
+        *operation = DeleterMoveOperation::assignment;
+        return *this;
+    }
+
+    constexpr auto operator()(int const&) const noexcept -> void {}
+};
+
+static_assert(std::is_nothrow_move_assignable_v<NothrowMoveAssignableDelete>);
+static_assert(!std::is_move_assignable_v<NonMoveAssignableDelete>);
+static_assert(std::is_move_assignable_v<ThrowingMoveAssignableDelete>);
+static_assert(!std::is_nothrow_move_assignable_v<ThrowingMoveAssignableDelete>);
+
 struct OwnershipProbeDelete final {
     void const* context;
     auto (*owns)(void const*) noexcept -> bool;
@@ -282,14 +393,14 @@ struct OwnershipProbeDelete final {
 template <typename Value, typename Deleter>
 concept DefaultResourceFormable = requires { typename Resource<Value, Deleter>; };
 
-template <typename Value, typename Deleter, typename SentinelType>
-concept ResourceFormable = requires { typename Resource<Value, Deleter, SentinelType>; };
+template <typename Value, typename Deleter, typename Engagement>
+concept ResourceFormable = requires { typename Resource<Value, Deleter, Engagement>; };
 
 template <typename Value>
 concept DefaultSentinelNameable = requires { typename DefaultSentinel<Value>; };
 
 template <auto projection, typename SentinelType>
-concept ProjectedSentinelNameable = requires { typename ProjectedSentinel<projection, SentinelType>; };
+concept ProjectedEngagementNameable = requires { typename ProjectedEngagement<projection, SentinelType>; };
 
 constexpr auto deleteInt(int const&) noexcept -> void {
 }
@@ -316,26 +427,30 @@ struct DefaultSentinel<MalformedHandle> final {
     static constexpr auto value = nullptr;
 };
 
+template <>
+struct DefaultSentinel<MissingSentinelValueHandle> final {};
+
 namespace {
 
 using PointerResource = Resource<int*, EmptyPointerDelete>;
 using OpaqueResource = Resource<OpaqueHandle, DeleteOpaque>;
-using OpaqueCompoundPolicy = ProjectedSentinel<&OpaqueCompound::handle, DefaultSentinel<OpaqueHandle>>;
-using OpaqueCompoundResource = Resource<OpaqueCompound, DeleteOpaqueCompound, OpaqueCompoundPolicy>;
+using OpaqueCompoundEngagement = ProjectedEngagement<&OpaqueCompound::handle>;
+using OpaqueCompoundResource = Resource<OpaqueCompound, DeleteOpaqueCompound, OpaqueCompoundEngagement>;
 using FunctionDelete = void (*)(int const&) noexcept;
 using FunctionDeleteResource = Resource<int, FunctionDelete>;
 using MemberDelete = void (MemberDeletedValue::*)() const noexcept;
 using MemberDeleteResource = Resource<MemberDeletedValue, MemberDelete>;
-using CompoundPolicy = ProjectedSentinel<&Compound::handle, Sentinel<StrongHandle{-1}>>;
-using CompoundResource = Resource<Compound, DestroyCompound, CompoundPolicy>;
-using NonDefaultCompoundPolicy = ProjectedSentinel<&NonDefaultCompound::handle, Sentinel<-1>>;
-using NonDefaultCompoundResource = Resource<NonDefaultCompound, DestroyNonDefaultCompound, NonDefaultCompoundPolicy>;
-using MoveChangingPolicy = ProjectedSentinel<&MoveChangingCompound::handle, Sentinel<MoveChangingHandle{-1}>>;
-using MoveChangingResource = Resource<MoveChangingCompound, DestroyMoveChangingCompound, MoveChangingPolicy>;
+using CompoundEngagement = ProjectedEngagement<&Compound::handle, Sentinel<StrongHandle{-1}>>;
+using CompoundResource = Resource<Compound, DestroyCompound, CompoundEngagement>;
+using NonNegativeCompoundEngagement = ProjectedEngagement<&IntCompound::handle, NonNegativeEngagement>;
+using NonNegativeCompoundResource = Resource<IntCompound, DestroyIntCompound, NonNegativeCompoundEngagement>;
+using NonDefaultCompoundEngagement = ProjectedEngagement<&NonDefaultCompound::handle, Sentinel<-1>>;
+using NonDefaultCompoundResource =
+    Resource<NonDefaultCompound, DestroyNonDefaultCompound, NonDefaultCompoundEngagement>;
+using MoveChangingEngagement = ProjectedEngagement<&MoveChangingCompound::handle, Sentinel<MoveChangingHandle{-1}>>;
+using MoveChangingResource = Resource<MoveChangingCompound, DestroyMoveChangingCompound, MoveChangingEngagement>;
 using MoveChangingScalarResource =
     Resource<MoveChangingHandle, DestroyMoveChangingHandle, Sentinel<MoveChangingHandle{-1}>>;
-using NonAssignableMoveChangingResource = Resource<NonAssignableMoveChangingHandle,
-    DeleteNonAssignableMoveChangingHandle, Sentinel<NonAssignableMoveChangingHandle{-1}>>;
 
 static_assert(sizeof(PointerResource) == sizeof(int*));
 static_assert(sizeof(OpaqueResource) == sizeof(OpaqueHandle));
@@ -344,6 +459,9 @@ static_assert(!std::copy_constructible<PointerResource>);
 static_assert(!std::is_copy_assignable_v<PointerResource>);
 static_assert(std::is_nothrow_move_constructible_v<PointerResource>);
 static_assert(std::is_nothrow_move_assignable_v<PointerResource>);
+static_assert(std::is_default_constructible_v<PointerResource>);
+static_assert(std::is_default_constructible_v<OpaqueResource>);
+static_assert(!std::is_default_constructible_v<Resource<int, NoopDelete, NonNegativeEngagement>>);
 static_assert(noexcept(std::declval<PointerResource&>().reset()));
 static_assert(noexcept(std::declval<PointerResource&>().release()));
 static_assert(std::same_as<decltype(std::declval<PointerResource const&>().get()), int* const&>);
@@ -354,6 +472,8 @@ static_assert(std::same_as<decltype(Resource{static_cast<int*>(nullptr), EmptyPo
 static_assert(std::same_as<decltype(Resource{7, CountDelete{nullptr}}), Resource<int, CountDelete>>);
 static_assert(
     std::same_as<decltype(Resource{7, CountDelete{nullptr}, sentinel<-1>}), Resource<int, CountDelete, Sentinel<-1>>>);
+static_assert(std::same_as<decltype(Resource{7, CountDelete{nullptr}, NonNegativeEngagement{}}),
+    Resource<int, CountDelete, NonNegativeEngagement>>);
 static_assert(std::same_as<decltype(Resource{StrongHandle{7}, CountStrongDelete{nullptr}}),
     Resource<StrongHandle, CountStrongDelete>>);
 static_assert(std::same_as<decltype(Resource{EnumHandle::valid, DeleteEnum{}}), Resource<EnumHandle, DeleteEnum>>);
@@ -361,20 +481,40 @@ static_assert(std::same_as<decltype(Resource{OpaqueHandle{7}, DeleteOpaque{}}), 
 static_assert(std::same_as<decltype(Resource{Compound{3, StrongHandle{7}}, DestroyCompound{nullptr},
                                projectedSentinel<&Compound::handle, StrongHandle{-1}>}),
     CompoundResource>);
+static_assert(std::same_as<decltype(Resource{IntCompound{3, 7}, DestroyIntCompound{},
+                               projectedEngagement<&IntCompound::handle, NonNegativeEngagement>}),
+    NonNegativeCompoundResource>);
+static_assert(std::same_as<decltype(Resource{OpaqueCompound{3, OpaqueHandle{7}}, DeleteOpaqueCompound{},
+                               projectedEngagement<&OpaqueCompound::handle>}),
+    OpaqueCompoundResource>);
 
 static_assert(!DefaultSentinelNameable<int>);
 static_assert(!DefaultSentinelNameable<int*>);
 static_assert(DefaultSentinelNameable<StrongHandle>);
 static_assert(DefaultSentinelNameable<EnumHandle>);
 static_assert(DefaultSentinelNameable<OpaqueHandle>);
-static_assert(ProjectedSentinelNameable<&IntCompound::handle, Sentinel<-1>>);
-static_assert(!ProjectedSentinelNameable<nullptr, Sentinel<-1>>);
+static_assert(ProjectedEngagementNameable<&IntCompound::handle, Sentinel<-1>>);
+static_assert(!ProjectedEngagementNameable<nullptr, Sentinel<-1>>);
+
+static_assert(!ResourceFormable<ConstIntCompound, DeleteAny<ConstIntCompound>,
+    ProjectedEngagement<&ConstIntCompound::handle, Sentinel<-1>>>);
+static_assert(!ResourceFormable<VolatileIntCompound, DeleteAny<VolatileIntCompound>,
+    ProjectedEngagement<&VolatileIntCompound::handle, Sentinel<-1>>>);
+static_assert(!ResourceFormable<IntCompound, DeleteAny<IntCompound>,
+    ProjectedEngagement<&UnrelatedIntCompound::handle, Sentinel<-1>>>);
+static_assert(!ResourceFormable<IntCompound, DeleteAny<IntCompound>,
+    ProjectedEngagement<&IntCompound::handle, Sentinel<nullptr>>>);
+static_assert(
+    ResourceFormable<IntCompound, DeleteAny<IntCompound>, ProjectedEngagement<&IntCompound::handle, Sentinel<-1>>>);
+static_assert(ResourceFormable<IntCompound, DeleteAny<IntCompound>, NonNegativeCompoundEngagement>);
+static_assert(EngagementFor<OpaqueCompoundEngagement, OpaqueCompound>);
 
 static_assert(!DefaultResourceFormable<int, ReturningDelete>);
 static_assert(!DefaultResourceFormable<int, ThrowingDelete>);
 static_assert(!DefaultResourceFormable<ThrowingMoveValue, DeleteThrowingMoveValue>);
 static_assert(MalformedHandle{-1} == MalformedHandle{-1});
 static_assert(!DefaultResourceFormable<MalformedHandle, DeleteMalformed>);
+static_assert(!DefaultResourceFormable<MissingSentinelValueHandle, DeleteMissingSentinelValue>);
 static_assert(ResourceFormable<MalformedHandle, DeleteMalformed, Sentinel<MalformedHandle{-1}>>);
 
 static_assert(std::is_default_constructible_v<Resource<int, NoopDelete>>);
@@ -387,10 +527,33 @@ static_assert(std::is_constructible_v<MemberDeleteResource, MemberDelete>);
 static_assert(!std::is_default_constructible_v<NonDefaultCompoundResource>);
 static_assert(std::is_constructible_v<NonDefaultCompoundResource, NonDefaultCompound, DestroyNonDefaultCompound>);
 
-static_assert(std::is_constructible_v<Resource<NonAssignable, DeleteNonAssignable, Sentinel<NonAssignable{-1}>>,
-    NonAssignable, DeleteNonAssignable>);
-static_assert(std::is_move_assignable_v<Resource<NonAssignable, DeleteNonAssignable, Sentinel<NonAssignable{-1}>>>);
+static_assert(!ResourceFormable<NonAssignable, DeleteNonAssignable, Sentinel<NonAssignable{-1}>>);
+static_assert(!ResourceFormable<NonAssignableCompound, DeleteNonAssignableCompound,
+    ProjectedEngagement<&NonAssignableCompound::handle, Sentinel<NonAssignable{-1}>>>);
 static_assert(std::is_move_assignable_v<Resource<OptionalNonAssignable, DeleteOptionalNonAssignable>>);
+static_assert(std::is_move_assignable_v<Resource<int, NothrowMoveAssignableDelete, Sentinel<-1>>>);
+static_assert(std::is_nothrow_move_constructible_v<Resource<int, NonMoveAssignableDelete, Sentinel<-1>>>);
+static_assert(!std::is_move_assignable_v<Resource<int, NonMoveAssignableDelete, Sentinel<-1>>>);
+static_assert(std::is_nothrow_move_constructible_v<Resource<int, ThrowingMoveAssignableDelete, Sentinel<-1>>>);
+static_assert(!std::is_move_assignable_v<Resource<int, ThrowingMoveAssignableDelete, Sentinel<-1>>>);
+
+constexpr auto constantEvaluationScenario() -> bool {
+    auto count = 0;
+    auto first = 7;
+    auto source = Resource<int, CountDelete, Sentinel<-1>>{first, CountDelete{&count}};
+    auto moved = std::move(source);
+
+    auto replacement = 9;
+    moved.reset(replacement);
+
+    auto destination = Resource<int, CountDelete, Sentinel<-1>>{11, CountDelete{&count}};
+    destination = std::move(moved);
+    auto const released = destination.release();
+
+    return count == 2 && !source && !moved && !destination && released == 9;
+}
+
+static_assert(constantEvaluationScenario());
 
 TEST(ResourceTest, PointerNullIsDisengagedByDefault) {
     auto resource = Resource{static_cast<int*>(nullptr), EmptyPointerDelete{}};
@@ -414,6 +577,22 @@ TEST(ResourceTest, FundamentalValueHasNoImplicitSentinel) {
 TEST(ResourceTest, ExplicitSentinelIsDisengaged) {
     auto count = 0;
     auto resource = Resource{-1, CountDelete{&count}, sentinel<-1>};
+
+    EXPECT_FALSE(resource);
+}
+
+TEST(ResourceTest, PredicateEngagementCanRecognizeMultipleDisengagedValues) {
+    auto count = 0;
+    auto resource = Resource<int, CountDelete, NonNegativeEngagement>{-7, CountDelete{&count}};
+
+    EXPECT_FALSE(resource);
+}
+
+TEST(ResourceTest, PredicateEngagementUsesItsCanonicalDisengagementTransition) {
+    auto count = 0;
+    auto resource = Resource<int, CountDelete, NonNegativeEngagement>{7, CountDelete{&count}};
+
+    static_cast<void>(resource.release());
 
     EXPECT_FALSE(resource);
 }
@@ -443,6 +622,39 @@ TEST(ResourceTest, UnspecializedClassUsesOutOfBandEngagement) {
     EXPECT_TRUE(resource);
 }
 
+TEST(ResourceTest, LvalueConstructionCopiesIdentity) {
+    auto count = 0;
+    auto value = 7;
+    auto resource = Resource{value, CountDelete{&count}};
+    value = 9;
+
+    EXPECT_EQ(resource.get(), 7);
+}
+
+TEST(ResourceTest, LvalueResetCopiesIdentity) {
+    auto count = 0;
+    auto resource = Resource{7, CountDelete{&count}};
+    auto replacement = 9;
+
+    resource.reset(replacement);
+    replacement = 11;
+
+    EXPECT_EQ(resource.get(), 9);
+}
+
+TEST(ResourceTest, DefaultConstructedResourceIsDisengaged) {
+    auto resource = Resource<int, NoopDelete>{};
+
+    EXPECT_FALSE(resource);
+}
+
+TEST(ResourceTest, DereferenceObservesIdentity) {
+    auto count = 0;
+    auto resource = Resource{7, CountDelete{&count}};
+
+    EXPECT_EQ(*resource, 7);
+}
+
 TEST(ResourceTest, ResetDoesNotRequireEqualityComparison) {
     auto resource = Resource{PlainHandle{7}, DeletePlain{}};
 
@@ -461,6 +673,17 @@ TEST(ResourceTest, ResetDoesNotUseValueEqualityAsResourceIdentity) {
     EXPECT_EQ(resource.get().value, 9);
 }
 
+TEST(ResourceTest, ResetRejectsOwnedValueReference) {
+#ifdef NDEBUG
+    GTEST_SKIP() << "internal assertions are compiled out (NDEBUG)";
+#else
+    auto count = 0;
+    auto resource = Resource{7, CountDelete{&count}};
+
+    EXPECT_DEBUG_DEATH(resource.reset(resource.get()), "");
+#endif
+}
+
 TEST(ResourceTest, DestructionInvokesDeleterExactlyOnce) {
     auto count = 0;
 
@@ -469,6 +692,16 @@ TEST(ResourceTest, DestructionInvokesDeleterExactlyOnce) {
     }
 
     EXPECT_EQ(count, 1);
+}
+
+TEST(ResourceTest, DestructionPassesOwnedIdentityToDeleter) {
+    auto deletedValue = 0;
+
+    {
+        auto resource = Resource{CoarselyEqualHandle{7}, RecordCoarselyEqualDelete{&deletedValue}};
+    }
+
+    EXPECT_EQ(deletedValue, 7);
 }
 
 TEST(ResourceTest, ReleaseReturnsIdentity) {
@@ -582,6 +815,18 @@ TEST(ResourceTest, MoveConstructionDisengagesSource) {
     EXPECT_FALSE(source);
 }
 
+TEST(ResourceTest, SentinelMoveConstructedPairDeletesOnce) {
+    auto count = 0;
+
+    {
+        auto source = Resource{7, CountDelete{&count}, sentinel<-1>};
+        auto destination = std::move(source);
+        static_cast<void>(destination);
+    }
+
+    EXPECT_EQ(count, 1);
+}
+
 TEST(ResourceTest, MoveAssignmentDestroysWithDestinationDeleter) {
     auto log = DeleteLog{};
     auto destination = Resource{5, LoggingDelete{11, &log}, sentinel<-1>};
@@ -613,17 +858,15 @@ TEST(ResourceTest, MoveAssignmentDisengagesSource) {
     EXPECT_FALSE(source);
 }
 
-TEST(ResourceTest, MoveAssignmentSupportsNonAssignableCapturingLambda) {
-    auto count = 0;
-    auto deleter = [&count](int const&) noexcept -> void { ++count; };
-    static_assert(!std::is_move_assignable_v<decltype(deleter)>);
-
-    auto destination = Resource{5, deleter, sentinel<-1>};
-    auto source = Resource{7, deleter, sentinel<-1>};
+TEST(ResourceTest, MoveAssignmentUsesNothrowDeleterAssignment) {
+    auto operation = DeleterMoveOperation::none;
+    auto destination = Resource{5, NothrowMoveAssignableDelete{&operation}, sentinel<-1>};
+    auto source = Resource{7, NothrowMoveAssignableDelete{&operation}, sentinel<-1>};
+    operation = DeleterMoveOperation::none;
 
     destination = std::move(source);
 
-    EXPECT_EQ(count, 1);
+    EXPECT_EQ(operation, DeleterMoveOperation::assignment);
 }
 
 TEST(ResourceTest, SelfMoveAssignmentPreservesIdentity) {
@@ -636,26 +879,6 @@ TEST(ResourceTest, SelfMoveAssignmentPreservesIdentity) {
     EXPECT_EQ(resource.get(), 7);
 }
 
-TEST(ResourceTest, ReleaseRestoresNonAssignableMoveChangingSentinel) {
-    auto resource =
-        NonAssignableMoveChangingResource{NonAssignableMoveChangingHandle{7}, DeleteNonAssignableMoveChangingHandle{}};
-
-    static_cast<void>(resource.release());
-
-    EXPECT_FALSE(resource);
-}
-
-TEST(ResourceTest, SentinelStorageSupportsNonAssignableValue) {
-    using NonAssignableResource = Resource<NonAssignable, DeleteNonAssignable, Sentinel<NonAssignable{-1}>>;
-
-    auto source = NonAssignableResource{NonAssignable{7}, DeleteNonAssignable{}};
-    auto destination = NonAssignableResource{NonAssignable{-1}, DeleteNonAssignable{}};
-
-    destination = std::move(source);
-
-    EXPECT_EQ(destination.get().value, 7);
-}
-
 TEST(ResourceTest, OptionalStorageSupportsNonAssignableValue) {
     using NonAssignableResource = Resource<OptionalNonAssignable, DeleteOptionalNonAssignable>;
 
@@ -665,6 +888,14 @@ TEST(ResourceTest, OptionalStorageSupportsNonAssignableValue) {
     destination = std::move(source);
 
     EXPECT_EQ(destination.get().value, 7);
+}
+
+TEST(ResourceTest, OptionalStorageCanResetNonAssignableValue) {
+    auto resource = Resource<OptionalNonAssignable, DeleteOptionalNonAssignable>{DeleteOptionalNonAssignable{}};
+
+    resource.reset(OptionalNonAssignable{7});
+
+    EXPECT_EQ(resource.get().value, 7);
 }
 
 TEST(ResourceTest, ScalarSentinelConstructionCanonicalizesDisengagedValue) {
@@ -689,18 +920,33 @@ TEST(ResourceTest, ScalarResetWithDisengagedValueStaysDisengaged) {
     EXPECT_FALSE(resource);
 }
 
-TEST(ResourceTest, ProjectedSentinelUsesOnlyProjectedMemberForEngagement) {
+TEST(ResourceTest, ProjectedEngagementUsesOnlyProjectedMemberForEngagement) {
     auto count = 0;
     auto resource = CompoundResource{Compound{31, StrongHandle{-1}}, DestroyCompound{&count}};
 
     EXPECT_FALSE(resource);
 }
 
-TEST(ResourceTest, ProjectedSentinelIgnoresAuxiliaryValuesForEngagement) {
+TEST(ResourceTest, ProjectedEngagementIgnoresAuxiliaryValuesForEngagement) {
     auto count = 0;
     auto resource = CompoundResource{Compound{-1, StrongHandle{7}}, DestroyCompound{&count}};
 
     EXPECT_TRUE(resource);
+}
+
+TEST(ResourceTest, ProjectedEngagementCanProjectPredicateEngagement) {
+    auto resource = NonNegativeCompoundResource{IntCompound{31, -7}, DestroyIntCompound{}};
+
+    EXPECT_FALSE(resource);
+}
+
+TEST(ResourceTest, ProjectedPredicateEngagementDisengagesMovedFromSource) {
+    auto source = NonNegativeCompoundResource{IntCompound{31, 7}, DestroyIntCompound{}};
+
+    auto destination = std::move(source);
+    static_cast<void>(destination);
+
+    EXPECT_FALSE(source);
 }
 
 TEST(ResourceTest, ProjectedMoveTransfersAuxiliaryBookkeeping) {
@@ -718,6 +964,16 @@ TEST(ResourceTest, ProjectedMoveDisengagesSource) {
 
     auto destination = std::move(source);
     static_cast<void>(destination);
+
+    EXPECT_FALSE(source);
+}
+
+TEST(ResourceTest, ProjectedMoveAssignmentDisengagesSource) {
+    auto count = 0;
+    auto destination = CompoundResource{Compound{31, StrongHandle{5}}, DestroyCompound{&count}};
+    auto source = CompoundResource{Compound{53, StrongHandle{7}}, DestroyCompound{&count}};
+
+    destination = std::move(source);
 
     EXPECT_FALSE(source);
 }
@@ -753,6 +1009,46 @@ TEST(ResourceTest, ProjectedResetWithDisengagedValueStaysDisengaged) {
     resource.reset(MoveChangingCompound{53, MoveChangingHandle{-1}});
 
     EXPECT_FALSE(resource);
+}
+
+TEST(ResourceTest, GetOnDisengagedResourceDies) {
+#ifdef NDEBUG
+    GTEST_SKIP() << "internal assertions are compiled out (NDEBUG)";
+#else
+    auto resource = Resource<int, NoopDelete>{};
+
+    EXPECT_DEBUG_DEATH(static_cast<void>(resource.get()), "");
+#endif
+}
+
+TEST(ResourceTest, DereferenceOnDisengagedResourceDies) {
+#ifdef NDEBUG
+    GTEST_SKIP() << "internal assertions are compiled out (NDEBUG)";
+#else
+    auto resource = Resource<int, NoopDelete>{};
+
+    EXPECT_DEBUG_DEATH(static_cast<void>(*resource), "");
+#endif
+}
+
+TEST(ResourceTest, ArrowOnDisengagedResourceDies) {
+#ifdef NDEBUG
+    GTEST_SKIP() << "internal assertions are compiled out (NDEBUG)";
+#else
+    auto resource = Resource<int, NoopDelete>{};
+
+    EXPECT_DEBUG_DEATH(static_cast<void>(resource.operator->()), "");
+#endif
+}
+
+TEST(ResourceTest, ReleaseOnDisengagedResourceDies) {
+#ifdef NDEBUG
+    GTEST_SKIP() << "internal assertions are compiled out (NDEBUG)";
+#else
+    auto resource = Resource<int, NoopDelete>{};
+
+    EXPECT_DEBUG_DEATH(static_cast<void>(resource.release()), "");
+#endif
 }
 
 TEST(ResourceTest, EmptyTypedResourceCanAcquireIdentity) {
