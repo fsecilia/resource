@@ -5,13 +5,11 @@
 /// \copyright Copyright (C) 2026 Frank Secilia
 
 #include "resource.hpp"
-
-#include <gtest/gtest.h>
-
 #include <array>
 #include <concepts>
 #include <cstddef>
 #include <cstdlib>
+#include <gtest/gtest.h>
 #include <type_traits>
 #include <utility>
 
