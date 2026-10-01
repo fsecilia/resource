@@ -1,5 +1,5 @@
 ---
-# canonical tool: clang-format 17.0.6
+# canonical tool: clang-format 21.1.8
 BasedOnStyle: LLVM
 Language: Cpp
 

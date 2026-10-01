@@ -54,19 +54,19 @@ struct Sentinel final {
     static constexpr auto value = sentinelValue;
 
     template <typename Value>
-        requires requires(Value const& value) {
-            { value == sentinelValue } noexcept -> std::convertible_to<bool>;
+        requires requires(Value const& candidate) {
+            { candidate == sentinelValue } noexcept -> std::convertible_to<bool>;
         }
-    static constexpr auto engaged(Value const& value) noexcept -> bool {
-        return !static_cast<bool>(value == sentinelValue);
+    static constexpr auto engaged(Value const& candidate) noexcept -> bool {
+        return !static_cast<bool>(candidate == sentinelValue);
     }
 
     template <typename Value>
-        requires requires(Value& value) {
-            { value = sentinelValue } noexcept;
+        requires requires(Value& candidate) {
+            { candidate = sentinelValue } noexcept;
         }
-    static constexpr auto disengage(Value& value) noexcept -> void {
-        value = sentinelValue;
+    static constexpr auto disengage(Value& candidate) noexcept -> void {
+        candidate = sentinelValue;
     }
 };
 

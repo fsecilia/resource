@@ -1,5 +1,5 @@
 ---
-# canonical tool: clang-tidy 19.1.0
+# minimum supported tool: clang-tidy 21.1.6
 Checks: >
   -*,
   readability-identifier-naming

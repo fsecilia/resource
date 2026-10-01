@@ -8,6 +8,7 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <concepts>
 #include <cstddef>
 #include <cstdlib>
@@ -301,8 +302,8 @@ struct MemberDeletedValue final {
 };
 
 struct DeleteLog final {
-    int entries[3]{};
-    int count{};
+    std::array<int, 3> entries{};
+    std::size_t count{};
 };
 
 struct LoggingDelete final {
@@ -755,7 +756,7 @@ TEST(ResourceTest, ResetDisengagesBeforeCleanup) {
     using ObservedResource = Resource<int, OwnershipProbeDelete, Sentinel<-1>>;
 
     auto observedDisengaged = false;
-    ObservedResource* resourceAddress = nullptr;
+    auto resourceAddress = static_cast<ObservedResource*>(nullptr);
     auto const owns = [](void const* context) noexcept -> bool {
         auto const resourceSlot = static_cast<ObservedResource* const*>(context);
         return static_cast<bool>(**resourceSlot);
