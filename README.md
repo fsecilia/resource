@@ -7,18 +7,22 @@ A resource can be a `FILE*`, an integer handle, an enum, or a compound value tha
 The common pointer-shaped case is direct:
 
 ```cpp
-#include <cstdio>
+#include <cstdlib>
 #include <resource/resource.hpp>
 
-using resource::Resource;
+struct FreeMemory final {
+    auto operator()(void* const& memory) const noexcept -> void {
+        std::free(memory);
+    }
+};
 
-auto file = Resource{
-    std::fopen("settings.txt", "r"),
-    &std::fclose,
+auto memory = resource::Resource{
+    std::malloc(4096),
+    FreeMemory{},
 };
 ```
 
-`FILE*` uses `nullptr` as its disengaged representation automatically. If `fopen` fails, `file` is disengaged. Otherwise, `fclose` runs when ownership ends.
+Pointers use `nullptr` as their disengaged representation automatically. If `malloc` fails, `memory` is disengaged. Otherwise, `FreeMemory` runs when ownership ends.
 
 Resource is header-only. Its public header is `<resource/resource.hpp>`.
 
@@ -81,7 +85,7 @@ auto fd = Resource{
 
 Without `sentinel<-1>`, an `int` uses optional-backed storage and `-1` is treated as an engaged value like any other integer.
 
-The corresponding Engagement type is `Sentinel<-1>` when the type must be spelled explicitly. A `Sentinel<V>` requires nonthrowing comparison with `V` and ordinary nonthrowing assignment back to `V`.
+The corresponding Engagement type is `Sentinel<-1>` when the type must be spelled explicitly. The sentinel must brace-construct the resource `Value` without narrowing. That construction, comparison with the canonical sentinel value, and assignment back to the canonical sentinel value must all be nonthrowing.
 
 ### Default sentinels for strong types
 
@@ -100,7 +104,7 @@ struct resource::DefaultSentinel<SocketHandle> {
 };
 ```
 
-Resource then selects that sentinel automatically for `SocketHandle`. Unlike `Sentinel<V>`, the customization stores its sentinel in a static value, so the sentinel itself does not need to be representable as a non-type template argument. `DefaultSentinel` is intentionally limited to class and enum types; aliased fundamental handles still need an explicit sentinel because the alias does not create a distinct C++ type.
+Resource then selects that sentinel automatically for `SocketHandle`. The stored sentinel must brace-construct `SocketHandle` without narrowing, and the resulting construction, comparison, and assignment operations must be nonthrowing. Unlike `Sentinel<V>`, the customization stores its sentinel in a static value, so the sentinel itself does not need to be representable as a non-type template argument. `DefaultSentinel` is intentionally limited to class and enum types; aliased fundamental handles still need an explicit sentinel because the alias does not create a distinct C++ type.
 
 A malformed or late `DefaultSentinel` specialization is an error rather than a request to fall back silently to optional-backed storage. The specialization must be visible before the first relevant Resource use and reachable from every use that depends on the default selection.
 
@@ -222,16 +226,45 @@ Resource detects that literal aliasing case with an address-based assertion. It 
 
 A deleter is an object that can be invoked with `Value const&`. Its return type is unrestricted because Resource has no return channel for cleanup performed by destruction or `reset()`.
 
-This is why ordinary C cleanup functions can be used directly:
+A named deleter can wrap an ordinary C cleanup function:
+
+```cpp
+#include <cstdio>
+#include <resource/resource.hpp>
+
+struct CloseFile final {
+    auto operator()(std::FILE* const& file) const noexcept -> int {
+        return std::fclose(file);
+    }
+};
+
+auto file = resource::Resource{
+    std::fopen("settings.txt", "r"),
+    CloseFile{},
+};
+```
+
+A lambda works equally well when a separate deleter type would add no useful meaning:
 
 ```cpp
 auto file = resource::Resource{
     std::fopen("settings.txt", "r"),
-    &std::fclose,
+    [](std::FILE* const& stream) noexcept {
+        return std::fclose(stream);
+    },
 };
 ```
 
-Resource discards the deleter's return value. If a cleanup result matters to program behavior, call `release()` and perform that cleanup explicitly, or use a deleter that records or reports the result through some external policy.
+These examples call `std::fclose` through a wrapper instead of taking its address. C++ does not generally guarantee that the address of a standard-library function may be taken unless that function is specifically designated addressable. Calling the function normally is unaffected.
+
+Resource discards the deleter's return value during automatic cleanup. If that result matters to program behavior, release the identity and invoke the stored deleter explicitly:
+
+```cpp
+auto const raw = file.release();
+auto const result = file.deleter()(raw);
+```
+
+`deleter()` returns the stored deleter by reference. The non-const overload permits stateful deleters to perform manual cleanup after `release()` without requiring the caller to duplicate the deleter's state.
 
 An exception must not escape when Resource invokes the deleter. Cleanup runs from nonthrowing Resource operations, including destruction, so an escaping exception terminates the program. The deleter does not need a `noexcept` annotation in its type; this is a semantic contract on its behavior when Resource calls it.
 

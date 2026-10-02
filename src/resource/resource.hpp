@@ -154,7 +154,7 @@ struct MemberObjectValue<Member Owner::*> final {
 };
 
 template <typename MemberPointer>
-using MemberObjectValueT = typename MemberObjectValue<MemberPointer>::Type;
+using MemberObjectValueT = MemberObjectValue<MemberPointer>::Type;
 
 } // namespace detail
 
