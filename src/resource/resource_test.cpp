@@ -20,6 +20,23 @@ struct EmptyPointerDelete final {
     constexpr auto operator()(int* const&) const noexcept -> void {}
 };
 
+struct Node;
+
+struct DeleteNode final {
+    auto operator()(Node* const& node) const noexcept -> void;
+};
+
+using NodeResource = Resource<Node*, DeleteNode>;
+
+struct Node final {
+    int value;
+    NodeResource next;
+};
+
+auto DeleteNode::operator()(Node* const& node) const noexcept -> void {
+    delete node;
+}
+
 struct CountDelete final {
     int* count;
 
@@ -824,6 +841,15 @@ TEST(ResourceTest, SentinelMoveConstructedPairDeletesOnce) {
     }
 
     EXPECT_EQ(count, 1);
+}
+
+TEST(ResourceTest, MoveAssignmentCanTakeSourceFromOwnedObject) {
+    auto tail = NodeResource{new Node{17, NodeResource{}}, DeleteNode{}};
+    auto head = NodeResource{new Node{11, std::move(tail)}, DeleteNode{}};
+
+    head = std::move(head.get()->next);
+
+    EXPECT_EQ(head.get()->value, 17);
 }
 
 TEST(ResourceTest, MoveAssignmentDestroysWithDestinationDeleter) {

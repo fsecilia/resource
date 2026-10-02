@@ -410,9 +410,10 @@ public:
             return *this;
         }
 
+        auto incoming = Resource{std::move(source)};
         reset();
-        deleter_ = std::move(source.deleter_);
-        storage_ = std::move(source.storage_);
+        deleter_ = std::move(incoming.deleter_);
+        storage_ = std::move(incoming.storage_);
         return *this;
     }
 
