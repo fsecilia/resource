@@ -62,12 +62,13 @@ if (PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
             CXX_STANDARD_REQUIRED
         )
 
+        set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+
         try_compile(
             _compiled
             SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/${SOURCE}"
             NO_CACHE
             CMAKE_FLAGS
-                "-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY"
                 "-DCMAKE_CXX_SCAN_FOR_MODULES=OFF"
             CXX_STANDARD "${_cxx_standard}"
             CXX_STANDARD_REQUIRED "${_cxx_standard_required}"
@@ -90,6 +91,11 @@ if (PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
             endif()
         endforeach()
     endfunction()
+
+    set_property(
+        DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+        "${CMAKE_CURRENT_SOURCE_DIR}/resource.hpp"
+    )
 
     _resource_expect_compile_failure(
         default-sentinel-fundamental
