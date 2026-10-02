@@ -20,6 +20,32 @@ struct EmptyPointerDelete final {
     constexpr auto operator()(int* const&) const noexcept -> void {}
 };
 
+struct PointerObject final {
+    int value;
+};
+
+struct EmptyPointerObjectDelete final {
+    constexpr auto operator()(PointerObject* const&) const noexcept -> void {}
+};
+
+struct EmptyConstPointerDelete final {
+    constexpr auto operator()(int const* const&) const noexcept -> void {}
+};
+
+struct EmptyVoidPointerDelete final {
+    constexpr auto operator()(void* const&) const noexcept -> void {}
+};
+
+using IdentityFunction = int(int) noexcept;
+
+constexpr auto identityFunction(int value) noexcept -> int {
+    return value;
+}
+
+struct EmptyFunctionPointerDelete final {
+    constexpr auto operator()(IdentityFunction* const&) const noexcept -> void {}
+};
+
 struct Node;
 
 struct DeleteNode final {
@@ -434,6 +460,9 @@ struct OwnershipProbeDelete final {
     auto operator()(int const&) const noexcept -> void { *observedDisengaged = !owns(context); }
 };
 
+template <typename ResourceType>
+concept DereferenceableResource = requires(ResourceType const& resource) { *resource; };
+
 template <typename Value, typename Deleter>
 concept DefaultResourceFormable = requires { typename Resource<Value, Deleter>; };
 
@@ -477,6 +506,10 @@ struct DefaultSentinel<MissingSentinelValueHandle> final {};
 namespace {
 
 using PointerResource = Resource<int*, EmptyPointerDelete>;
+using PointerObjectResource = Resource<PointerObject*, EmptyPointerObjectDelete>;
+using ConstPointerResource = Resource<int const*, EmptyConstPointerDelete>;
+using VoidPointerResource = Resource<void*, EmptyVoidPointerDelete>;
+using FunctionPointerResource = Resource<IdentityFunction*, EmptyFunctionPointerDelete>;
 using OpaqueResource = Resource<OpaqueHandle, DeleteOpaque>;
 using OpaqueCompoundEngagement = ProjectedEngagement<&OpaqueCompound::handle>;
 using OpaqueCompoundResource = Resource<OpaqueCompound, DeleteOpaqueCompound, OpaqueCompoundEngagement>;
@@ -525,8 +558,17 @@ static_assert(noexcept(std::declval<PointerResource const&>().deleter()));
 static_assert(std::same_as<decltype(std::declval<PointerResource&>().deleter()), EmptyPointerDelete&>);
 static_assert(std::same_as<decltype(std::declval<PointerResource const&>().deleter()), EmptyPointerDelete const&>);
 static_assert(std::same_as<decltype(std::declval<PointerResource const&>().get()), int* const&>);
-static_assert(std::same_as<decltype(*std::declval<PointerResource const&>()), int* const&>);
-static_assert(std::same_as<decltype(std::declval<PointerResource const&>().operator->()), int* const*>);
+static_assert(std::same_as<decltype(*std::declval<PointerResource const&>()), int&>);
+static_assert(std::same_as<decltype(std::declval<PointerResource const&>().operator->()), int*>);
+static_assert(std::same_as<decltype(*std::declval<ConstPointerResource const&>()), int const&>);
+static_assert(std::same_as<decltype(std::declval<ConstPointerResource const&>().operator->()), int const*>);
+static_assert(std::same_as<decltype(*std::declval<Resource<int, NoopDelete> const&>()), int const&>);
+static_assert(std::same_as<decltype(std::declval<Resource<int, NoopDelete> const&>().operator->()), int const*>);
+static_assert(!DereferenceableResource<VoidPointerResource>);
+static_assert(std::same_as<decltype(std::declval<VoidPointerResource const&>().operator->()), void*>);
+static_assert(DereferenceableResource<FunctionPointerResource>);
+static_assert(std::same_as<decltype(*std::declval<FunctionPointerResource const&>()), IdentityFunction&>);
+static_assert(std::same_as<decltype(std::declval<FunctionPointerResource const&>().operator->()), IdentityFunction*>);
 
 static_assert(std::same_as<decltype(Resource{static_cast<int*>(nullptr), EmptyPointerDelete{}}), PointerResource>);
 static_assert(std::same_as<decltype(Resource{7, CountDelete{nullptr}}), Resource<int, CountDelete>>);
@@ -728,6 +770,35 @@ TEST(ResourceTest, DereferenceObservesIdentity) {
     auto resource = Resource{7, CountDelete{&count}};
 
     EXPECT_EQ(*resource, 7);
+}
+
+TEST(ResourceTest, PointerDereferenceObservesPointee) {
+    auto value = 7;
+    auto resource = PointerResource{&value, EmptyPointerDelete{}};
+
+    EXPECT_EQ(*resource, 7);
+}
+
+TEST(ResourceTest, ConstPointerResourceCanMutateMutablePointee) {
+    auto value = 7;
+    auto const resource = PointerResource{&value, EmptyPointerDelete{}};
+
+    *resource = 17;
+
+    EXPECT_EQ(value, 17);
+}
+
+TEST(ResourceTest, PointerArrowObservesPointee) {
+    auto value = PointerObject{7};
+    auto resource = PointerObjectResource{&value, EmptyPointerObjectDelete{}};
+
+    EXPECT_EQ(resource->value, 7);
+}
+
+TEST(ResourceTest, FunctionPointerDereferenceObservesFunction) {
+    auto resource = FunctionPointerResource{&identityFunction, EmptyFunctionPointerDelete{}};
+
+    EXPECT_EQ((*resource)(17), 17);
 }
 
 TEST(ResourceTest, ResetDoesNotRequireEqualityComparison) {

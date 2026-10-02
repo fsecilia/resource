@@ -32,15 +32,9 @@ Resource is header-only. Its public header is `<resource/resource.hpp>`.
 
 The third parameter normally does not need to be written. Resource selects a default representation when it can and otherwise stores engagement state out of band.
 
-A `Value` is identity, not mutable application state. It must be an unqualified non-array object type that is nothrow move-constructible and nothrow destructible. Observation is const-only:
+A `Value` is identity, not mutable application state. It must be an unqualified non-array object type that is nothrow move-constructible and nothrow destructible. `get()` always observes that identity as `Value const&`. For non-pointer identities, `operator*` and `operator->` provide the same const-only contained-value access.
 
-```cpp
-auto get() const noexcept -> Value const&;
-auto operator*() const noexcept -> Value const&;
-auto operator->() const noexcept -> Value const*;
-```
-
-For pointer `Value` types, `operator->` follows contained-value semantics rather than smart-pointer semantics. For example, `Resource<Widget*, Deleter>::operator->()` returns `Widget* const*`. Use `get()` when the stored pointer itself is what you need.
+For pointer identities, `operator*` and `operator->` instead follow owning-pointer semantics: they access the object or function identified by the stored pointer. A const Resource does not add constness to the pointee. For example, `Resource<Widget*, Deleter>::operator->()` returns `Widget*`, while `get()` still returns `Widget* const&`. `operator*` is unavailable when the pointer cannot be dereferenced, such as `void*`.
 
 Resource is noncopyable. Moving transfers ownership and leaves the source disengaged.
 

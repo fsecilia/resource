@@ -480,12 +480,38 @@ public:
     /// Returns the owned identity.
     ///
     /// \pre `owns()` is true.
-    constexpr auto operator*() const noexcept -> Value const& { return get(); }
+    constexpr auto operator*() const noexcept -> Value const&
+        requires(!std::is_pointer_v<Value>)
+    {
+        return get();
+    }
+
+    /// Returns the object or function identified by an owned pointer identity.
+    ///
+    /// \pre `owns()` is true.
+    constexpr auto operator*() const noexcept -> std::add_lvalue_reference_t<std::remove_pointer_t<Value>>
+        requires std::is_pointer_v<Value> && requires(Value const& value) { *value; }
+    {
+        return *get();
+    }
 
     /// Returns a pointer to the owned identity.
     ///
     /// \pre `owns()` is true.
-    constexpr auto operator->() const noexcept -> Value const* { return std::addressof(get()); }
+    constexpr auto operator->() const noexcept -> Value const*
+        requires(!std::is_pointer_v<Value>)
+    {
+        return std::addressof(get());
+    }
+
+    /// Returns the owned pointer identity.
+    ///
+    /// \pre `owns()` is true.
+    constexpr auto operator->() const noexcept -> Value
+        requires std::is_pointer_v<Value>
+    {
+        return get();
+    }
 
     /// Releases ownership without invoking the deleter.
     ///
