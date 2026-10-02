@@ -47,6 +47,34 @@ struct NoopDelete final {
     constexpr auto operator()(int const&) const noexcept -> void {}
 };
 
+struct ContextDelete final {
+    int context{};
+
+    constexpr operator int() const noexcept { return context; }
+
+    constexpr auto operator()(int const&) const noexcept -> void {}
+};
+
+struct AmbiguousResourceArgument final {
+    constexpr operator int() const noexcept { return 7; }
+    constexpr operator ContextDelete() const noexcept { return ContextDelete{11}; }
+};
+
+struct ExplicitDeleteArgument final {};
+
+struct ExplicitDelete final {
+    constexpr ExplicitDelete() noexcept = default;
+    constexpr explicit ExplicitDelete(ExplicitDeleteArgument) noexcept {}
+
+    constexpr auto operator()(int const&) const noexcept -> void {}
+};
+
+struct SelfDeletingValue final {
+    int value{};
+
+    constexpr auto operator()(SelfDeletingValue const&) const noexcept -> void {}
+};
+
 struct NonNegativeEngagement final {
     static constexpr auto engaged(int value) noexcept -> bool { return value >= 0; }
 
@@ -454,6 +482,9 @@ using OpaqueCompoundEngagement = ProjectedEngagement<&OpaqueCompound::handle>;
 using OpaqueCompoundResource = Resource<OpaqueCompound, DeleteOpaqueCompound, OpaqueCompoundEngagement>;
 using FunctionDelete = void (*)(int const&) noexcept;
 using FunctionDeleteResource = Resource<int, FunctionDelete>;
+using ContextDeleteResource = Resource<int, ContextDelete>;
+using ExplicitDeleteResource = Resource<int, ExplicitDelete>;
+using SelfDeletingResource = Resource<SelfDeletingValue, SelfDeletingValue>;
 using MemberDelete = void (MemberDeletedValue::*)() const noexcept;
 using MemberDeleteResource = Resource<MemberDeletedValue, MemberDelete>;
 using CompoundEngagement = ProjectedEngagement<&Compound::handle, Sentinel<StrongHandle{-1}>>;
@@ -478,6 +509,15 @@ static_assert(std::is_nothrow_move_assignable_v<PointerResource>);
 static_assert(std::is_default_constructible_v<PointerResource>);
 static_assert(std::is_default_constructible_v<OpaqueResource>);
 static_assert(!std::is_default_constructible_v<Resource<int, NoopDelete, NonNegativeEngagement>>);
+static_assert(std::constructible_from<ContextDeleteResource, int>);
+static_assert(std::constructible_from<ContextDeleteResource, ContextDelete>);
+static_assert(std::constructible_from<ExplicitDeleteResource, ExplicitDeleteArgument>);
+static_assert(!std::constructible_from<ContextDeleteResource, AmbiguousResourceArgument>);
+static_assert(!std::constructible_from<SelfDeletingResource, SelfDeletingValue>);
+static_assert(std::constructible_from<SelfDeletingResource, SelfDeletingValue, SelfDeletingValue>);
+static_assert(std::constructible_from<OpaqueResource, int>);
+static_assert(!std::constructible_from<Resource<unsigned, NoopDelete>, int>);
+static_assert(!std::constructible_from<FunctionDeleteResource, int>);
 static_assert(noexcept(std::declval<PointerResource&>().reset()));
 static_assert(noexcept(std::declval<PointerResource&>().release()));
 static_assert(std::same_as<decltype(std::declval<PointerResource const&>().get()), int* const&>);
@@ -1098,6 +1138,36 @@ TEST(ResourceTest, EmptyTypedResourceCanAcquireIdentity) {
     resource.reset(7);
 
     EXPECT_EQ(resource.get(), 7);
+}
+
+TEST(ResourceTest, ExactValueArgumentWinsOverDeleterConstruction) {
+    auto resource = ContextDeleteResource{7};
+
+    EXPECT_EQ(resource.get(), 7);
+}
+
+TEST(ResourceTest, ExactDeleterArgumentWinsOverValueConstruction) {
+    auto resource = ContextDeleteResource{ContextDelete{11}};
+
+    EXPECT_FALSE(resource);
+}
+
+TEST(ResourceTest, UnambiguousConvertibleValueArgumentCreatesResource) {
+    auto resource = OpaqueResource{7};
+
+    EXPECT_EQ(resource.get(), OpaqueHandle{7});
+}
+
+TEST(ResourceTest, ExplicitlyConstructibleDeleterArgumentCreatesEmptyResource) {
+    auto resource = ExplicitDeleteResource{ExplicitDeleteArgument{}};
+
+    EXPECT_FALSE(resource);
+}
+
+TEST(ResourceTest, FunctionPointerDeleterAcceptsUnambiguousLambda) {
+    auto resource = FunctionDeleteResource{[](int const&) noexcept {}};
+
+    EXPECT_FALSE(resource);
 }
 
 TEST(ResourceTest, FunctionPointerDeleterCanBeSuppliedForEmptyResource) {

@@ -357,6 +357,30 @@ template <ResourceValue Value, typename Engagement>
     requires EngagementSelectionFor<Engagement, Value>
 using StorageForT = StorageFor<Value, Engagement>::Type;
 
+template <typename Target, typename Argument>
+concept BraceConstructibleFrom = requires(Argument&& argument) { Target{std::forward<Argument>(argument)}; };
+
+template <typename Argument, typename Target>
+concept ExactArgument = std::same_as<std::remove_cvref_t<Argument>, Target>;
+
+template <typename Argument, typename Value>
+concept ValueShapedArgument = ExactArgument<Argument, Value> || BraceConstructibleFrom<Value, Argument>;
+
+template <typename Argument, typename Deleter>
+concept DeleterShapedArgument = ExactArgument<Argument, Deleter> || BraceConstructibleFrom<Deleter, Argument>;
+
+template <typename Argument, typename Value, typename Deleter>
+concept ValueArgument = (!std::same_as<Value, Deleter>) &&
+    (ExactArgument<Argument, Value> ||
+        (!ExactArgument<Argument, Deleter> && ValueShapedArgument<Argument, Value> &&
+            !DeleterShapedArgument<Argument, Deleter>));
+
+template <typename Argument, typename Value, typename Deleter>
+concept DeleterArgument = (!std::same_as<Value, Deleter>) &&
+    (ExactArgument<Argument, Deleter> ||
+        (!ExactArgument<Argument, Value> && DeleterShapedArgument<Argument, Deleter> &&
+            !ValueShapedArgument<Argument, Value>));
+
 } // namespace detail
 
 /// Owns one external resource identity and destroys it with an explicit deleter.
@@ -374,11 +398,20 @@ public:
         : deleter_{},
           storage_{} {}
 
+    template <typename ValueArg>
+        requires detail::ValueArgument<ValueArg, Value, Deleter> && detail::BraceConstructibleFrom<Value, ValueArg> &&
+                     std::is_nothrow_default_constructible_v<Deleter> && (!std::is_pointer_v<Deleter>) &&
+                     (!std::is_member_pointer_v<Deleter>)
+    explicit constexpr Resource(ValueArg&& value) noexcept(noexcept(Value{std::forward<ValueArg>(value)}))
+        : deleter_{},
+          storage_{Value{std::forward<ValueArg>(value)}} {}
+
     template <typename DeleterArg>
-        requires std::is_nothrow_constructible_v<Deleter, DeleterArg&&> &&
+        requires detail::DeleterArgument<DeleterArg, Value, Deleter> &&
+                     std::is_nothrow_constructible_v<Deleter, DeleterArg&&> &&
                      std::is_nothrow_default_constructible_v<Storage>
     explicit constexpr Resource(DeleterArg&& deleter) noexcept
-        : deleter_{std::forward<DeleterArg>(deleter)},
+        : deleter_{Deleter{std::forward<DeleterArg>(deleter)}},
           storage_{} {}
 
     template <typename DeleterArg>

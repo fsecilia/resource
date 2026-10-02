@@ -196,7 +196,9 @@ A stateful deleter can be supplied without a value:
 resource::Resource<Handle, DestroyHandle> handle{destroyHandle};
 ```
 
-Pointer and member-pointer deleters are excluded from the zero-argument form because value-initializing them would produce a null callable. They can still be supplied explicitly through the deleter-only constructor when the selected storage can begin empty.
+An explicitly typed Resource can also accept only a value when its deleter can be safely default-constructed. A one-argument call chooses an exact `Value` or `Deleter` type first. Otherwise, the argument must identify only one role: it must brace-construct the `Value` without narrowing, or brace-construct the `Deleter`. If both roles match, Resource rejects the construction rather than guessing. When `Value` and `Deleter` are the same type, one-argument construction is unavailable.
+
+Pointer and member-pointer deleters are excluded from forms that default-construct the deleter because value-initializing them would produce a null callable. They can still be supplied explicitly through the deleter-only constructor when the selected storage can begin empty.
 
 ## Ownership operations
 

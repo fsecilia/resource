@@ -121,6 +121,18 @@ if (PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
         Sentinel
         "constraints not satisfied"
     )
+    _resource_expect_compile_failure(
+        ambiguous-single-argument
+        ambiguous_single_argument_compile_fail.cpp
+        Resource
+        "constraints not satisfied"
+    )
+    _resource_expect_compile_failure(
+        same-type-single-argument
+        same_type_single_argument_compile_fail.cpp
+        Resource
+        "constraints not satisfied"
+    )
 endif()
 
 canon_add_documentation()
