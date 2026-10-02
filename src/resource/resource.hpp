@@ -466,6 +466,12 @@ public:
     /// Tests whether this object owns a resource identity.
     explicit constexpr operator bool() const noexcept { return owns(); }
 
+    /// Returns the deleter.
+    constexpr auto deleter() noexcept -> Deleter& { return deleter_; }
+
+    /// Returns the deleter.
+    constexpr auto deleter() const noexcept -> Deleter const& { return deleter_; }
+
     /// Returns the owned identity.
     ///
     /// \pre `owns()` is true.

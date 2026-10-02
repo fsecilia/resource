@@ -520,6 +520,10 @@ static_assert(!std::constructible_from<Resource<unsigned, NoopDelete>, int>);
 static_assert(!std::constructible_from<FunctionDeleteResource, int>);
 static_assert(noexcept(std::declval<PointerResource&>().reset()));
 static_assert(noexcept(std::declval<PointerResource&>().release()));
+static_assert(noexcept(std::declval<PointerResource&>().deleter()));
+static_assert(noexcept(std::declval<PointerResource const&>().deleter()));
+static_assert(std::same_as<decltype(std::declval<PointerResource&>().deleter()), EmptyPointerDelete&>);
+static_assert(std::same_as<decltype(std::declval<PointerResource const&>().deleter()), EmptyPointerDelete const&>);
 static_assert(std::same_as<decltype(std::declval<PointerResource const&>().get()), int* const&>);
 static_assert(std::same_as<decltype(*std::declval<PointerResource const&>()), int* const&>);
 static_assert(std::same_as<decltype(std::declval<PointerResource const&>().operator->()), int* const*>);
@@ -802,6 +806,34 @@ TEST(ResourceTest, ReleaseDisengagesResource) {
     static_cast<void>(resource.release());
 
     EXPECT_FALSE(resource);
+}
+
+TEST(ResourceTest, DeleterReturnsStoredState) {
+    auto log = DeleteLog{};
+    auto resource = Resource{7, LoggingDelete{11, &log}};
+
+    EXPECT_EQ(resource.deleter().id, 11);
+}
+
+TEST(ResourceTest, MutableDeleterCanUpdateStoredState) {
+    auto firstLog = DeleteLog{};
+    auto secondLog = DeleteLog{};
+    auto resource = Resource{7, LoggingDelete{11, &firstLog}};
+
+    resource.deleter().log = &secondLog;
+    resource.reset();
+
+    EXPECT_EQ(secondLog.count, 1U);
+}
+
+TEST(ResourceTest, ReleasedIdentityCanBeCleanedUpWithStoredDeleter) {
+    auto count = 0;
+    auto resource = Resource{7, CountDelete{&count}};
+    auto const value = resource.release();
+
+    resource.deleter()(value);
+
+    EXPECT_EQ(count, 1);
 }
 
 TEST(ResourceTest, ResetDestroysOwnedIdentity) {
