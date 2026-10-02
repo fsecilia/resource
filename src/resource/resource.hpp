@@ -53,18 +53,20 @@ struct Sentinel final {
 
     template <typename Value>
         requires requires(Value const& candidate) {
-            { candidate == sentinelValue } noexcept -> std::convertible_to<bool>;
+            { Value{sentinelValue} } noexcept -> std::same_as<Value>;
+            { candidate == Value{sentinelValue} } noexcept -> std::convertible_to<bool>;
         }
     static constexpr auto engaged(Value const& candidate) noexcept -> bool {
-        return !static_cast<bool>(candidate == sentinelValue);
+        return !static_cast<bool>(candidate == Value{sentinelValue});
     }
 
     template <typename Value>
         requires requires(Value& candidate) {
-            { candidate = sentinelValue } noexcept;
+            { Value{sentinelValue} } noexcept -> std::same_as<Value>;
+            { candidate = Value{sentinelValue} } noexcept;
         }
     static constexpr auto disengage(Value& candidate) noexcept -> void {
-        candidate = sentinelValue;
+        candidate = Value{sentinelValue};
     }
 };
 
@@ -106,18 +108,20 @@ template <ResourceValue Value>
 struct DefaultSentinelEngagement final {
     static constexpr auto engaged(Value const& value) noexcept -> bool
         requires requires {
-            { value == DefaultSentinel<Value>::value } noexcept -> std::convertible_to<bool>;
+            { Value{DefaultSentinel<Value>::value} } noexcept -> std::same_as<Value>;
+            { value == Value{DefaultSentinel<Value>::value} } noexcept -> std::convertible_to<bool>;
         }
     {
-        return !static_cast<bool>(value == DefaultSentinel<Value>::value);
+        return !static_cast<bool>(value == Value{DefaultSentinel<Value>::value});
     }
 
     static constexpr auto disengage(Value& value) noexcept -> void
         requires requires {
-            { value = DefaultSentinel<Value>::value } noexcept;
+            { Value{DefaultSentinel<Value>::value} } noexcept -> std::same_as<Value>;
+            { value = Value{DefaultSentinel<Value>::value} } noexcept;
         }
     {
-        value = DefaultSentinel<Value>::value;
+        value = Value{DefaultSentinel<Value>::value};
     }
 };
 
@@ -202,13 +206,17 @@ template <typename Engagement, ResourceValue Value>
 struct DisengagedValueFactory;
 
 template <auto sentinelValue, ResourceValue Value>
-    requires std::is_nothrow_constructible_v<Value, decltype((sentinelValue))>
+    requires requires {
+        { Value{sentinelValue} } noexcept -> std::same_as<Value>;
+    }
 struct DisengagedValueFactory<Sentinel<sentinelValue>, Value> final {
     static constexpr auto make() noexcept -> Value { return Value{sentinelValue}; }
 };
 
 template <ResourceValue Value>
-    requires std::is_nothrow_constructible_v<Value, decltype((DefaultSentinel<Value>::value))>
+    requires requires {
+        { Value{DefaultSentinel<Value>::value} } noexcept -> std::same_as<Value>;
+    }
 struct DisengagedValueFactory<DefaultSentinelEngagement<Value>, Value> final {
     static constexpr auto make() noexcept -> Value { return Value{DefaultSentinel<Value>::value}; }
 };

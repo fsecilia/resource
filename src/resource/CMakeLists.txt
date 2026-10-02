@@ -115,6 +115,12 @@ if (PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
         DefaultSentinel
         "after instantiation"
     )
+    _resource_expect_compile_failure(
+        sentinel-narrowing
+        sentinel_narrowing_compile_fail.cpp
+        Sentinel
+        "constraints not satisfied"
+    )
 endif()
 
 canon_add_documentation()

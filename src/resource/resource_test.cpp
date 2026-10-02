@@ -522,6 +522,21 @@ static_assert(!ResourceFormable<IntCompound, DeleteAny<IntCompound>,
     ProjectedEngagement<&IntCompound::handle, Sentinel<nullptr>>>);
 static_assert(
     ResourceFormable<IntCompound, DeleteAny<IntCompound>, ProjectedEngagement<&IntCompound::handle, Sentinel<-1>>>);
+static_assert(ResourceFormable<unsigned, DeleteAny<unsigned>, Sentinel<0>>);
+static_assert(!ResourceFormable<unsigned, DeleteAny<unsigned>, Sentinel<-1>>);
+
+constexpr auto unsignedSentinelScenario() -> bool {
+    auto empty = Resource<unsigned, DeleteAny<unsigned>, Sentinel<0>>{};
+    if (empty) {
+        return false;
+    }
+
+    auto owned = Resource<unsigned, DeleteAny<unsigned>, Sentinel<0>>{7U, DeleteAny<unsigned>{}};
+    auto const released = owned.release();
+    return released == 7U && !owned;
+}
+
+static_assert(unsignedSentinelScenario());
 static_assert(ResourceFormable<IntCompound, DeleteAny<IntCompound>, NonNegativeCompoundEngagement>);
 static_assert(EngagementFor<OpaqueCompoundEngagement, OpaqueCompound>);
 
