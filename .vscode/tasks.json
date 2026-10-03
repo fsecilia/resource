@@ -2,16 +2,34 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "type": "cmake",
-            "label": "CMake: build",
-            "command": "build",
-            "targets": [
-                "all"
+            "label": "build",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "${command:cmake.buildDirectory}",
+                "--target",
+                "all",
+                "--",
+                "-k",
+                "1"
             ],
-            "preset": "debug",
-            "group": "build",
-            "problemMatcher": [],
-            "detail": "CMake template build task"
-        }
+            "options": {
+                "env": {
+                    "CLICOLOR_FORCE": "1",
+                    "FORCE_COLOR": "1"
+                }
+            },
+            "presentation": {
+                "clear": true,
+                "echo": true,
+                "focus": true,
+                "panel": "dedicated",
+                "reveal": "always",
+                "revealProblems": "never",
+                "showReuseMessage": false
+            },
+            "problemMatcher": []
+        },
     ]
 }
