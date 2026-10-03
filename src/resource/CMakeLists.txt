@@ -28,6 +28,18 @@ if (PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
     add_test(NAME ResourceTest COMMAND ResourceTest)
     canon_apply_target(ResourceTest)
 
+    add_test(
+        NAME resource.integration.install
+        COMMAND
+            "${CMAKE_COMMAND}"
+            "-DRESOURCE_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+            "-DRESOURCE_TEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/integration/install"
+            "-DRESOURCE_GENERATOR=${CMAKE_GENERATOR}"
+            "-DRESOURCE_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+            -P "${PROJECT_SOURCE_DIR}/test/install.cmake"
+    )
+    set_tests_properties(resource.integration.install PROPERTIES LABELS integration TIMEOUT 120)
+
     function(_resource_expect_compile_failure NAME SOURCE)
         if (ARGC LESS 3)
             message(FATAL_ERROR
