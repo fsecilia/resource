@@ -14,27 +14,7 @@ target_sources(
 canon_apply_library(Resource)
 
 if (PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
-    message(CHECK_START "finding googletest")
-    if (NOT TARGET GTest::gtest_main)
-        if (EXISTS "${PROJECT_SOURCE_DIR}/external/googletest/CMakeLists.txt")
-            message(CHECK_PASS "using vendored googletest")
-            add_subdirectory(
-                "${PROJECT_SOURCE_DIR}/external/googletest"
-                "${PROJECT_BINARY_DIR}/external/googletest"
-                EXCLUDE_FROM_ALL
-            )
-        else()
-            message(CHECK_PASS "using host googletest")
-            find_package(GTest "1.16.0...<2.0.0" CONFIG)
-        endif()
-    endif()
-    if (NOT TARGET GTest::gtest_main)
-        message(CHECK_FAIL "compatible system googletest not found")
-        message(FATAL_ERROR
-            "dependency 'googletest' unavailable; initialize submodule "
-            "'external/googletest' or install a compatible host package"
-        )
-    endif()
+    canon_require_googletest()
 
     add_executable(ResourceTest)
     set_target_properties(ResourceTest PROPERTIES OUTPUT_NAME resource_test)
