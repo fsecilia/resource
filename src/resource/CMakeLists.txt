@@ -135,4 +135,4 @@ if (PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
     )
 endif()
 
-canon_add_documentation()
+canon_add_documentation(src)
