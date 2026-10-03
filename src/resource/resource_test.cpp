@@ -120,6 +120,23 @@ struct StrongHandle final {
     friend constexpr auto operator==(StrongHandle const&, StrongHandle const&) noexcept -> bool = default;
 };
 
+struct ThrowingBooleanProxy final {
+    constexpr operator bool() const noexcept(false) { return true; }
+};
+
+struct ThrowingBooleanHandle final {
+    int value;
+
+    friend constexpr auto operator==(ThrowingBooleanHandle const&, ThrowingBooleanHandle const&) noexcept
+        -> ThrowingBooleanProxy {
+        return {};
+    }
+};
+
+struct DeleteThrowingBooleanHandle final {
+    constexpr auto operator()(ThrowingBooleanHandle const&) const noexcept -> void {}
+};
+
 struct CountStrongDelete final {
     int* count;
 
@@ -496,6 +513,11 @@ struct DefaultSentinel<EnumHandle> final {
 };
 
 template <>
+struct DefaultSentinel<ThrowingBooleanHandle> final {
+    static constexpr ThrowingBooleanHandle value{-1};
+};
+
+template <>
 struct DefaultSentinel<OpaqueHandle> final {
     static constexpr OpaqueHandle value{-1};
 };
@@ -615,6 +637,9 @@ static_assert(
     ResourceFormable<IntCompound, DeleteAny<IntCompound>, ProjectedEngagement<&IntCompound::handle, Sentinel<-1>>>);
 static_assert(ResourceFormable<unsigned, DeleteAny<unsigned>, Sentinel<0>>);
 static_assert(!ResourceFormable<unsigned, DeleteAny<unsigned>, Sentinel<-1>>);
+static_assert(
+    !ResourceFormable<ThrowingBooleanHandle, DeleteThrowingBooleanHandle, Sentinel<ThrowingBooleanHandle{-1}>>);
+static_assert(!DefaultResourceFormable<ThrowingBooleanHandle, DeleteThrowingBooleanHandle>);
 
 constexpr auto unsignedSentinelScenario() -> bool {
     auto empty = Resource<unsigned, DeleteAny<unsigned>, Sentinel<0>>{};

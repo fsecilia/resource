@@ -27,6 +27,10 @@ concept NothrowMovableObject =
     std::is_object_v<Type> && !std::is_array_v<Type> && std::same_as<Type, std::remove_cv_t<Type>> &&
     std::is_nothrow_move_constructible_v<Type> && std::is_nothrow_destructible_v<Type>;
 
+template <typename Type>
+concept NothrowBooleanConvertible =
+    std::convertible_to<Type, bool> && noexcept(static_cast<bool>(std::declval<Type>()));
+
 } // namespace detail
 
 /// Describes a type that can represent an owned external resource identity.
@@ -54,7 +58,7 @@ struct Sentinel final {
     template <typename Value>
         requires requires(Value const& candidate) {
             { Value{sentinelValue} } noexcept -> std::same_as<Value>;
-            { candidate == Value{sentinelValue} } noexcept -> std::convertible_to<bool>;
+            { candidate == Value{sentinelValue} } noexcept -> detail::NothrowBooleanConvertible;
         }
     static constexpr auto engaged(Value const& candidate) noexcept -> bool {
         return !static_cast<bool>(candidate == Value{sentinelValue});
@@ -109,7 +113,7 @@ struct DefaultSentinelEngagement final {
     static constexpr auto engaged(Value const& value) noexcept -> bool
         requires requires {
             { Value{DefaultSentinel<Value>::value} } noexcept -> std::same_as<Value>;
-            { value == Value{DefaultSentinel<Value>::value} } noexcept -> std::convertible_to<bool>;
+            { value == Value{DefaultSentinel<Value>::value} } noexcept -> NothrowBooleanConvertible;
         }
     {
         return !static_cast<bool>(value == Value{DefaultSentinel<Value>::value});
