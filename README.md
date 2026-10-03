@@ -317,6 +317,12 @@ Resource itself is header-only. Building the repository is mainly useful for its
 
 The project uses C++26. The supported compiler floor is GCC 14.2, with Clang 17 as a cross-check. CMake 3.31.6 is required for the project build.
 
+After cloning, populate Canon and its nested GoogleTest dependency before building the validation suite:
+
+```sh
+git submodule update --init --recursive
+```
+
 The shared developer presets provide compiler-qualified configure, build, and test workflows. GCC is the primary profile:
 
 ```sh
