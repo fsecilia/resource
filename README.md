@@ -317,13 +317,15 @@ Resource itself is header-only. Building the repository is mainly useful for its
 
 The project uses C++26. The supported compiler floor is GCC 14.2, with Clang 17 as a cross-check. CMake 3.31.6 is required for the project build.
 
-The shared developer presets provide complete configure, build, and test workflows:
+The shared developer presets provide compiler-qualified configure, build, and test workflows. GCC is the primary profile:
 
 ```sh
-cmake --workflow --preset debug
-cmake --workflow --preset release
-cmake --workflow --preset asan
+cmake --workflow --preset gcc-debug
+cmake --workflow --preset gcc-release
+cmake --workflow --preset gcc-asan
 ```
+
+Corresponding `clang-*` workflows are available for the Clang cross-check.
 
 The test suite combines focused GoogleTest cases, compile-time assertions, and configure-time compile-fail fixtures for contracts that must be rejected by the language.
 
