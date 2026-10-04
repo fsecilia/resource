@@ -364,6 +364,11 @@ using StorageForT = StorageFor<Value, Engagement>::Type;
 template <typename Target, typename Argument>
 concept BraceConstructibleFrom = requires(Argument&& argument) { Target{std::forward<Argument>(argument)}; };
 
+template <typename Target, typename Argument>
+concept NothrowBraceConstructibleFrom = requires(Argument&& argument) {
+    { Target{std::forward<Argument>(argument)} } noexcept;
+};
+
 template <typename Argument, typename Target>
 concept ExactArgument = std::same_as<std::remove_cvref_t<Argument>, Target>;
 
@@ -422,32 +427,32 @@ public:
     template <typename DeleterArg>
         requires detail::DeleterArgument<DeleterArg, Value, Deleter> &&
                      detail::SingleArgumentConstructible<DeleterArg, Deleter> &&
-                     std::is_nothrow_constructible_v<Deleter, DeleterArg&&> &&
+                     detail::NothrowBraceConstructibleFrom<Deleter, DeleterArg> &&
                      std::is_nothrow_default_constructible_v<Storage>
     explicit constexpr Resource(DeleterArg&& deleter) noexcept
         : deleter_{Deleter{std::forward<DeleterArg>(deleter)}},
           storage_{} {}
 
     template <typename DeleterArg>
-        requires std::is_copy_constructible_v<Value> && std::is_nothrow_constructible_v<Deleter, DeleterArg&&>
+        requires std::is_copy_constructible_v<Value> && detail::NothrowBraceConstructibleFrom<Deleter, DeleterArg>
     constexpr Resource(Value const& value, DeleterArg&& deleter) noexcept(std::is_nothrow_copy_constructible_v<Value>)
         : deleter_{std::forward<DeleterArg>(deleter)},
           storage_{value} {}
 
     template <typename DeleterArg>
-        requires std::is_nothrow_constructible_v<Deleter, DeleterArg&&>
+        requires detail::NothrowBraceConstructibleFrom<Deleter, DeleterArg>
     constexpr Resource(Value&& value, DeleterArg&& deleter) noexcept
         : deleter_{std::forward<DeleterArg>(deleter)},
           storage_{std::move(value)} {}
 
     template <typename DeleterArg>
-        requires std::is_copy_constructible_v<Value> && std::is_nothrow_constructible_v<Deleter, DeleterArg&&>
+        requires std::is_copy_constructible_v<Value> && detail::NothrowBraceConstructibleFrom<Deleter, DeleterArg>
     constexpr Resource(Value const& value, DeleterArg&& deleter, Engagement) noexcept(
         std::is_nothrow_copy_constructible_v<Value>)
         : Resource{value, std::forward<DeleterArg>(deleter)} {}
 
     template <typename DeleterArg>
-        requires std::is_nothrow_constructible_v<Deleter, DeleterArg&&>
+        requires detail::NothrowBraceConstructibleFrom<Deleter, DeleterArg>
     constexpr Resource(Value&& value, DeleterArg&& deleter, Engagement) noexcept
         : Resource{std::move(value), std::forward<DeleterArg>(deleter)} {}
 
