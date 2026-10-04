@@ -385,6 +385,19 @@ struct ReturningDelete final {
     constexpr auto operator()(int const&) const noexcept -> int { return 0; }
 };
 
+struct OverloadedDelete final {
+    int* selectedOverload;
+
+    constexpr auto operator()(int&) const noexcept -> void { *selectedOverload = 1; }
+    constexpr auto operator()(int const&) const noexcept -> void { *selectedOverload = 2; }
+};
+
+struct [[nodiscard]] CleanupResult final {};
+
+struct NodiscardReturningDelete final {
+    constexpr auto operator()(int const&) const noexcept -> CleanupResult { return {}; }
+};
+
 struct PotentiallyThrowingInvokeDelete final {
     auto operator()(int const&) const -> void {}
 };
@@ -1024,6 +1037,23 @@ TEST(ResourceTest, ResetDestroysOwnedIdentity) {
     resource.reset();
 
     EXPECT_EQ(count, 1);
+}
+
+TEST(ResourceTest, ResetPassesConstIdentityToDeleter) {
+    auto selectedOverload = 0;
+    auto resource = Resource{7, OverloadedDelete{&selectedOverload}};
+
+    resource.reset();
+
+    EXPECT_EQ(selectedOverload, 2);
+}
+
+TEST(ResourceTest, ResetDiscardsNodiscardDeleterResult) {
+    auto resource = Resource{7, NodiscardReturningDelete{}};
+
+    resource.reset();
+
+    EXPECT_FALSE(resource);
 }
 
 TEST(ResourceTest, ResetLeavesResourceDisengaged) {

@@ -545,7 +545,7 @@ public:
         }
 
         auto value = storage_.release();
-        std::invoke(deleter_, value);
+        static_cast<void>(std::invoke(deleter_, std::as_const(value)));
     }
 
     /// Replaces the owned identity with a copy of `value`.
