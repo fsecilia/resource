@@ -175,6 +175,31 @@ struct DeletePlain final {
     constexpr auto operator()(PlainHandle const&) const noexcept -> void {}
 };
 
+struct AggregateHandle final {
+    int device;
+    int handle;
+};
+
+struct DeleteAggregateHandle final {
+    constexpr auto operator()(AggregateHandle const&) const noexcept -> void {}
+};
+
+struct AggregateHandleArgument final {
+    constexpr operator int() const noexcept { return 7; }
+    constexpr operator AggregateHandle() const noexcept { return AggregateHandle{7, 11}; }
+};
+
+struct AggregateDelete final {
+    int context;
+    int* count;
+
+    constexpr auto operator()(int* const&) const noexcept -> void {
+        if (count != nullptr) {
+            ++*count;
+        }
+    }
+};
+
 struct CoarselyEqualHandle final {
     int value;
 
@@ -576,6 +601,11 @@ static_assert(!std::constructible_from<ContextDeleteResource, AmbiguousResourceA
 static_assert(!std::constructible_from<SelfDeletingResource, SelfDeletingValue>);
 static_assert(std::constructible_from<SelfDeletingResource, SelfDeletingValue, SelfDeletingValue>);
 static_assert(std::constructible_from<OpaqueResource, int>);
+static_assert(!std::constructible_from<Resource<AggregateHandle, DeleteAggregateHandle>, int>);
+static_assert(!std::constructible_from<Resource<AggregateHandle, DeleteAggregateHandle>, AggregateHandleArgument>);
+static_assert(std::constructible_from<Resource<AggregateHandle, DeleteAggregateHandle>, AggregateHandle>);
+static_assert(!std::constructible_from<Resource<int*, AggregateDelete>, int>);
+static_assert(std::constructible_from<Resource<int*, AggregateDelete>, AggregateDelete>);
 static_assert(!std::constructible_from<Resource<unsigned, NoopDelete>, int>);
 static_assert(!std::constructible_from<FunctionDeleteResource, int>);
 static_assert(noexcept(std::declval<PointerResource&>().reset()));

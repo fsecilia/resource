@@ -367,11 +367,18 @@ concept BraceConstructibleFrom = requires(Argument&& argument) { Target{std::for
 template <typename Argument, typename Target>
 concept ExactArgument = std::same_as<std::remove_cvref_t<Argument>, Target>;
 
+template <typename Argument, typename Target>
+concept SingleArgumentConstructible =
+    ExactArgument<Argument, Target> || (!std::is_aggregate_v<Target> && BraceConstructibleFrom<Target, Argument>);
+
+template <typename Argument, typename Target>
+concept SingleArgumentShaped = SingleArgumentConstructible<Argument, Target> || std::convertible_to<Argument, Target>;
+
 template <typename Argument, typename Value>
-concept ValueShapedArgument = ExactArgument<Argument, Value> || BraceConstructibleFrom<Value, Argument>;
+concept ValueShapedArgument = SingleArgumentShaped<Argument, Value>;
 
 template <typename Argument, typename Deleter>
-concept DeleterShapedArgument = ExactArgument<Argument, Deleter> || BraceConstructibleFrom<Deleter, Argument>;
+concept DeleterShapedArgument = SingleArgumentShaped<Argument, Deleter>;
 
 template <typename Argument, typename Value, typename Deleter>
 concept ValueArgument = (!std::same_as<Value, Deleter>) &&
@@ -403,7 +410,9 @@ public:
           storage_{} {}
 
     template <typename ValueArg>
-        requires detail::ValueArgument<ValueArg, Value, Deleter> && detail::BraceConstructibleFrom<Value, ValueArg> &&
+        requires detail::ValueArgument<ValueArg, Value, Deleter> &&
+                     detail::SingleArgumentConstructible<ValueArg, Value> &&
+                     detail::BraceConstructibleFrom<Value, ValueArg> &&
                      std::is_nothrow_default_constructible_v<Deleter> && (!std::is_pointer_v<Deleter>) &&
                      (!std::is_member_pointer_v<Deleter>)
     explicit constexpr Resource(ValueArg&& value) noexcept(noexcept(Value{std::forward<ValueArg>(value)}))
@@ -412,6 +421,7 @@ public:
 
     template <typename DeleterArg>
         requires detail::DeleterArgument<DeleterArg, Value, Deleter> &&
+                     detail::SingleArgumentConstructible<DeleterArg, Deleter> &&
                      std::is_nothrow_constructible_v<Deleter, DeleterArg&&> &&
                      std::is_nothrow_default_constructible_v<Storage>
     explicit constexpr Resource(DeleterArg&& deleter) noexcept
