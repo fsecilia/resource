@@ -100,25 +100,25 @@ struct ProjectedEngagement final {
     /// Reports engagement using the projected member.
     template <typename Value>
         requires requires(Value const& value) {
-            requires std::is_lvalue_reference_v<decltype(std::invoke(projection, value))>;
-            requires EngagementFor<Engagement, std::remove_cvref_t<decltype(std::invoke(projection, value))>>;
-            { Engagement::engaged(std::invoke(projection, value)) } noexcept -> std::same_as<bool>;
+            requires std::is_lvalue_reference_v<decltype((value.*projection))>;
+            requires EngagementFor<Engagement, std::remove_cvref_t<decltype((value.*projection))>>;
+            { Engagement::engaged((value.*projection)) } noexcept -> std::same_as<bool>;
         }
     static constexpr auto engaged(Value const& value) noexcept -> bool {
-        return Engagement::engaged(std::invoke(projection, value));
+        return Engagement::engaged((value.*projection));
     }
 
     /// Disengages the projected member.
     template <typename Value>
         requires requires(Value& value) {
-            requires std::is_lvalue_reference_v<decltype(std::invoke(projection, value))>;
-            requires(!std::is_const_v<std::remove_reference_t<decltype(std::invoke(projection, value))>>);
-            requires(!std::is_volatile_v<std::remove_reference_t<decltype(std::invoke(projection, value))>>);
-            requires EngagementFor<Engagement, std::remove_cvref_t<decltype(std::invoke(projection, value))>>;
-            { Engagement::disengage(std::invoke(projection, value)) } noexcept -> std::same_as<void>;
+            requires std::is_lvalue_reference_v<decltype((value.*projection))>;
+            requires(!std::is_const_v<std::remove_reference_t<decltype((value.*projection))>>);
+            requires(!std::is_volatile_v<std::remove_reference_t<decltype((value.*projection))>>);
+            requires EngagementFor<Engagement, std::remove_cvref_t<decltype((value.*projection))>>;
+            { Engagement::disengage((value.*projection)) } noexcept -> std::same_as<void>;
         }
     static constexpr auto disengage(Value& value) noexcept -> void {
-        Engagement::disengage(std::invoke(projection, value));
+        Engagement::disengage((value.*projection));
     }
 };
 

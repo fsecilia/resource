@@ -8,7 +8,9 @@
 #include <array>
 #include <concepts>
 #include <cstddef>
+#include <functional>
 #include <gtest/gtest.h>
+#include <memory>
 #include <type_traits>
 #include <utility>
 
@@ -667,6 +669,10 @@ static_assert(!ResourceFormable<VolatileIntCompound, DeleteAny<VolatileIntCompou
     ProjectedEngagement<&VolatileIntCompound::handle, Sentinel<-1>>>);
 static_assert(!ResourceFormable<IntCompound, DeleteAny<IntCompound>,
     ProjectedEngagement<&UnrelatedIntCompound::handle, Sentinel<-1>>>);
+static_assert(!EngagementFor<ProjectedEngagement<&IntCompound::handle, Sentinel<-1>>, IntCompound*>);
+static_assert(
+    !EngagementFor<ProjectedEngagement<&IntCompound::handle, Sentinel<-1>>, std::reference_wrapper<IntCompound>>);
+static_assert(!EngagementFor<ProjectedEngagement<&IntCompound::handle, Sentinel<-1>>, std::unique_ptr<IntCompound>>);
 static_assert(!ResourceFormable<IntCompound, DeleteAny<IntCompound>,
     ProjectedEngagement<&IntCompound::handle, Sentinel<nullptr>>>);
 static_assert(
