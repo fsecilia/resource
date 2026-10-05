@@ -36,3 +36,5 @@ if (PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
     )
     set_tests_properties(resource.integration.install PROPERTIES LABELS integration TIMEOUT 120)
 endif()
+
+canon_add_documentation(src)

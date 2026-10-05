@@ -28,5 +28,3 @@ if (PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
     add_test(NAME ResourceTest COMMAND ResourceTest)
     canon_apply_target(ResourceTest)
 endif()
-
-canon_add_documentation(src)
