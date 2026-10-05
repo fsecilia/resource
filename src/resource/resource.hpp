@@ -297,26 +297,17 @@ template <typename Argument, typename Target>
 concept SingleArgumentConstructible =
     ExactArgument<Argument, Target> || (!std::is_aggregate_v<Target> && BraceConstructibleFrom<Target, Argument>);
 
-template <typename Argument, typename Target>
-concept SingleArgumentShaped = SingleArgumentConstructible<Argument, Target>;
-
-template <typename Argument, typename Value>
-concept ValueShapedArgument = SingleArgumentShaped<Argument, Value>;
-
-template <typename Argument, typename Deleter>
-concept DeleterShapedArgument = SingleArgumentShaped<Argument, Deleter>;
-
 template <typename Argument, typename Value, typename Deleter>
 concept ValueArgument = (!std::same_as<Value, Deleter>) &&
     (ExactArgument<Argument, Value> ||
-        (!ExactArgument<Argument, Deleter> && ValueShapedArgument<Argument, Value> &&
-            !DeleterShapedArgument<Argument, Deleter>));
+        (!ExactArgument<Argument, Deleter> && SingleArgumentConstructible<Argument, Value> &&
+            !SingleArgumentConstructible<Argument, Deleter>));
 
 template <typename Argument, typename Value, typename Deleter>
 concept DeleterArgument = (!std::same_as<Value, Deleter>) &&
     (ExactArgument<Argument, Deleter> ||
-        (!ExactArgument<Argument, Value> && DeleterShapedArgument<Argument, Deleter> &&
-            !ValueShapedArgument<Argument, Value>));
+        (!ExactArgument<Argument, Value> && SingleArgumentConstructible<Argument, Deleter> &&
+            !SingleArgumentConstructible<Argument, Value>));
 
 } // namespace detail
 
@@ -337,9 +328,7 @@ public:
 
     /// Adopts a resource identity and default-constructs the deleter.
     template <typename ValueArg>
-        requires detail::ValueArgument<ValueArg, Value, Deleter> &&
-                     detail::SingleArgumentConstructible<ValueArg, Value> &&
-                     detail::BraceConstructibleFrom<Value, ValueArg> &&
+        requires detail::ValueArgument<ValueArg, Value, Deleter> && detail::BraceConstructibleFrom<Value, ValueArg> &&
                      std::is_nothrow_default_constructible_v<Deleter> && (!std::is_pointer_v<Deleter>) &&
                      (!std::is_member_pointer_v<Deleter>)
     explicit constexpr Resource(ValueArg&& value) noexcept(noexcept(Value{std::forward<ValueArg>(value)}))
@@ -349,7 +338,6 @@ public:
     /// Constructs an empty Resource with the supplied deleter.
     template <typename DeleterArg>
         requires detail::DeleterArgument<DeleterArg, Value, Deleter> &&
-                     detail::SingleArgumentConstructible<DeleterArg, Deleter> &&
                      detail::NothrowBraceConstructibleFrom<Deleter, DeleterArg> &&
                      std::is_nothrow_default_constructible_v<Storage>
     explicit constexpr Resource(DeleterArg&& deleter) noexcept
