@@ -20,8 +20,6 @@ namespace detail {
 
 struct NoEngagement final {};
 
-struct UnspecifiedDefaultSentinel {};
-
 template <typename Type>
 concept NothrowMovableObject =
     std::is_object_v<Type> && !std::is_array_v<Type> && std::same_as<Type, std::remove_cv_t<Type>> &&
@@ -78,16 +76,6 @@ struct Sentinel final {
 template <auto sentinelValue>
 inline constexpr Sentinel<sentinelValue> sentinel{};
 
-/// Customizes the intrinsic sentinel for a distinct class or enum resource identity.
-///
-/// Specialize this type before the first `Resource` use for `Value`, and provide a
-/// static constexpr `value` member. The specialization must be reachable from every
-/// use that depends on it. Fundamental and pointer types cannot specialize this
-/// customization point.
-template <typename Value>
-    requires(std::is_class_v<Value> || std::is_enum_v<Value>)
-struct DefaultSentinel : detail::UnspecifiedDefaultSentinel {};
-
 /// Describes in-band engagement for a resource identity.
 ///
 /// `engaged(value)` reports whether `value` identifies an owned resource.
@@ -99,72 +87,8 @@ concept EngagementFor = ResourceValue<Value> && requires(Value& value, Value con
     { Engagement::disengage(value) } noexcept -> std::same_as<void>;
 };
 
-namespace detail {
-
-template <typename Value>
-concept DefaultSentinelCustomizable = std::is_class_v<Value> || std::is_enum_v<Value>;
-
-template <typename Value>
-concept DefaultSentinelSpecialized =
-    DefaultSentinelCustomizable<Value> && !std::is_base_of_v<UnspecifiedDefaultSentinel, DefaultSentinel<Value>>;
-
-template <ResourceValue Value>
-struct DefaultSentinelEngagement final {
-    static constexpr auto engaged(Value const& value) noexcept -> bool
-        requires requires {
-            { Value{DefaultSentinel<Value>::value} } noexcept -> std::same_as<Value>;
-            { value == Value{DefaultSentinel<Value>::value} } noexcept -> NothrowBooleanConvertible;
-        }
-    {
-        return !static_cast<bool>(value == Value{DefaultSentinel<Value>::value});
-    }
-
-    static constexpr auto disengage(Value& value) noexcept -> void
-        requires requires {
-            { Value{DefaultSentinel<Value>::value} } noexcept -> std::same_as<Value>;
-            { value = Value{DefaultSentinel<Value>::value} } noexcept;
-        }
-    {
-        value = Value{DefaultSentinel<Value>::value};
-    }
-};
-
-template <ResourceValue Value>
-struct DefaultEngagementSelector {
-    using Type = NoEngagement;
-};
-
-template <ResourceValue Value>
-    requires std::is_pointer_v<Value>
-struct DefaultEngagementSelector<Value> final {
-    using Type = Sentinel<nullptr>;
-};
-
-template <ResourceValue Value>
-    requires(!std::is_pointer_v<Value> && DefaultSentinelSpecialized<Value>)
-struct DefaultEngagementSelector<Value> final {
-    using Type = DefaultSentinelEngagement<Value>;
-};
-
-template <ResourceValue Value>
-using DefaultEngagementFor = DefaultEngagementSelector<Value>::Type;
-
-template <typename MemberPointer>
-struct MemberObjectValue;
-
-template <typename Member, typename Owner>
-struct MemberObjectValue<Member Owner::*> final {
-    using Type = std::remove_cv_t<Member>;
-};
-
-template <typename MemberPointer>
-using MemberObjectValueT = MemberObjectValue<MemberPointer>::Type;
-
-} // namespace detail
-
 /// Projects engagement behavior onto one member of a compound resource identity.
-template <auto projection,
-    typename Engagement = detail::DefaultEngagementFor<detail::MemberObjectValueT<decltype(projection)>>>
+template <auto projection, typename Engagement>
     requires std::is_member_object_pointer_v<decltype(projection)>
 struct ProjectedEngagement final {
     template <typename Value>
@@ -191,8 +115,7 @@ struct ProjectedEngagement final {
 };
 
 /// Tag object for selecting projected engagement through CTAD.
-template <auto projection,
-    typename Engagement = detail::DefaultEngagementFor<detail::MemberObjectValueT<decltype(projection)>>>
+template <auto projection, typename Engagement>
     requires std::is_member_object_pointer_v<decltype(projection)>
 inline constexpr ProjectedEngagement<projection, Engagement> projectedEngagement{};
 
@@ -215,14 +138,6 @@ template <auto sentinelValue, ResourceValue Value>
     }
 struct DisengagedValueFactory<Sentinel<sentinelValue>, Value> final {
     static constexpr auto make() noexcept -> Value { return Value{sentinelValue}; }
-};
-
-template <ResourceValue Value>
-    requires requires {
-        { Value{DefaultSentinel<Value>::value} } noexcept -> std::same_as<Value>;
-    }
-struct DisengagedValueFactory<DefaultSentinelEngagement<Value>, Value> final {
-    static constexpr auto make() noexcept -> Value { return Value{DefaultSentinel<Value>::value}; }
 };
 
 template <typename Engagement, typename Value>
@@ -400,8 +315,7 @@ concept DeleterArgument = (!std::same_as<Value, Deleter>) &&
 } // namespace detail
 
 /// Owns one external resource identity and destroys it with an explicit deleter.
-template <ResourceValue Value, ResourceDeleter<Value> Deleter,
-    typename Engagement = detail::DefaultEngagementFor<Value>>
+template <ResourceValue Value, ResourceDeleter<Value> Deleter, typename Engagement = detail::NoEngagement>
     requires detail::EngagementSelectionFor<Engagement, Value>
 class Resource final {
 private:

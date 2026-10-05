@@ -90,24 +90,6 @@ if (PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
     )
 
     _resource_expect_compile_failure(
-        default-sentinel-fundamental
-        default_sentinel_fundamental_compile_fail.cpp
-        DefaultSentinel
-        "constraints not satisfied"
-    )
-    _resource_expect_compile_failure(
-        default-sentinel-pointer
-        default_sentinel_pointer_compile_fail.cpp
-        DefaultSentinel
-        "constraints not satisfied"
-    )
-    _resource_expect_compile_failure(
-        default-sentinel-late
-        default_sentinel_late_compile_fail.cpp
-        DefaultSentinel
-        "after instantiation"
-    )
-    _resource_expect_compile_failure(
         sentinel-narrowing
         sentinel_narrowing_compile_fail.cpp
         Sentinel

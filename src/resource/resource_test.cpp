@@ -154,6 +154,14 @@ private:
     int value_;
 };
 
+struct OpaqueHandleEngagement final {
+    static constexpr auto engaged(OpaqueHandle const& value) noexcept -> bool { return !(value == OpaqueHandle{-1}); }
+
+    static constexpr auto disengage(OpaqueHandle& value) noexcept -> void { value = OpaqueHandle{-1}; }
+};
+
+static_assert(EngagementFor<OpaqueHandleEngagement, OpaqueHandle>);
+
 struct DeleteOpaque final {
     constexpr auto operator()(OpaqueHandle const&) const noexcept -> void {}
 };
@@ -232,24 +240,6 @@ enum class EnumHandle : int {
 
 struct DeleteEnum final {
     constexpr auto operator()(EnumHandle const&) const noexcept -> void {}
-};
-
-struct MalformedHandle final {
-    int value;
-
-    friend constexpr auto operator==(MalformedHandle const&, MalformedHandle const&) noexcept -> bool = default;
-};
-
-struct DeleteMalformed final {
-    constexpr auto operator()(MalformedHandle const&) const noexcept -> void {}
-};
-
-struct MissingSentinelValueHandle final {
-    int value;
-};
-
-struct DeleteMissingSentinelValue final {
-    constexpr auto operator()(MissingSentinelValueHandle const&) const noexcept -> void {}
 };
 
 struct Compound final {
@@ -538,54 +528,24 @@ concept DefaultResourceFormable = requires { typename Resource<Value, Deleter>; 
 template <typename Value, typename Deleter, typename Engagement>
 concept ResourceFormable = requires { typename Resource<Value, Deleter, Engagement>; };
 
-template <typename Value>
-concept DefaultSentinelNameable = requires { typename DefaultSentinel<Value>; };
-
-template <auto projection, typename SentinelType>
-concept ProjectedEngagementNameable = requires { typename ProjectedEngagement<projection, SentinelType>; };
+template <auto projection, typename EngagementType>
+concept ProjectedEngagementNameable = requires { typename ProjectedEngagement<projection, EngagementType>; };
 
 constexpr auto deleteInt(int const&) noexcept -> void {
 }
 
 } // namespace
 
-template <>
-struct DefaultSentinel<StrongHandle> final {
-    static constexpr StrongHandle value{-1};
-};
-
-template <>
-struct DefaultSentinel<EnumHandle> final {
-    static constexpr EnumHandle value{EnumHandle::invalid};
-};
-
-template <>
-struct DefaultSentinel<ThrowingBooleanHandle> final {
-    static constexpr ThrowingBooleanHandle value{-1};
-};
-
-template <>
-struct DefaultSentinel<OpaqueHandle> final {
-    static constexpr OpaqueHandle value{-1};
-};
-
-template <>
-struct DefaultSentinel<MalformedHandle> final {
-    static constexpr auto value = nullptr;
-};
-
-template <>
-struct DefaultSentinel<MissingSentinelValueHandle> final {};
-
 namespace {
 
 using PointerResource = Resource<int*, EmptyPointerDelete>;
+using PointerSentinelResource = Resource<int*, EmptyPointerDelete, Sentinel<nullptr>>;
 using PointerObjectResource = Resource<PointerObject*, EmptyPointerObjectDelete>;
 using ConstPointerResource = Resource<int const*, EmptyConstPointerDelete>;
 using VoidPointerResource = Resource<void*, EmptyVoidPointerDelete>;
 using FunctionPointerResource = Resource<IdentityFunction*, EmptyFunctionPointerDelete>;
 using OpaqueResource = Resource<OpaqueHandle, DeleteOpaque>;
-using OpaqueCompoundEngagement = ProjectedEngagement<&OpaqueCompound::handle>;
+using OpaqueCompoundEngagement = ProjectedEngagement<&OpaqueCompound::handle, OpaqueHandleEngagement>;
 using OpaqueCompoundResource = Resource<OpaqueCompound, DeleteOpaqueCompound, OpaqueCompoundEngagement>;
 using FunctionDelete = void (*)(int const&) noexcept;
 using FunctionDeleteResource = Resource<int, FunctionDelete>;
@@ -608,8 +568,7 @@ using MoveChangingResource = Resource<MoveChangingCompound, DestroyMoveChangingC
 using MoveChangingScalarResource =
     Resource<MoveChangingHandle, DestroyMoveChangingHandle, Sentinel<MoveChangingHandle{-1}>>;
 
-static_assert(sizeof(PointerResource) == sizeof(int*));
-static_assert(sizeof(OpaqueResource) == sizeof(OpaqueHandle));
+static_assert(sizeof(PointerSentinelResource) == sizeof(int*));
 static_assert(sizeof(OpaqueCompoundResource) == sizeof(OpaqueCompound));
 static_assert(!std::copy_constructible<PointerResource>);
 static_assert(!std::is_copy_assignable_v<PointerResource>);
@@ -677,14 +636,9 @@ static_assert(std::same_as<decltype(Resource{IntCompound{3, 7}, DestroyIntCompou
                                projectedEngagement<&IntCompound::handle, NonNegativeEngagement>}),
     NonNegativeCompoundResource>);
 static_assert(std::same_as<decltype(Resource{OpaqueCompound{3, OpaqueHandle{7}}, DeleteOpaqueCompound{},
-                               projectedEngagement<&OpaqueCompound::handle>}),
+                               projectedEngagement<&OpaqueCompound::handle, OpaqueHandleEngagement>}),
     OpaqueCompoundResource>);
 
-static_assert(!DefaultSentinelNameable<int>);
-static_assert(!DefaultSentinelNameable<int*>);
-static_assert(DefaultSentinelNameable<StrongHandle>);
-static_assert(DefaultSentinelNameable<EnumHandle>);
-static_assert(DefaultSentinelNameable<OpaqueHandle>);
 static_assert(ProjectedEngagementNameable<&IntCompound::handle, Sentinel<-1>>);
 static_assert(!ProjectedEngagementNameable<nullptr, Sentinel<-1>>);
 
@@ -702,7 +656,7 @@ static_assert(ResourceFormable<unsigned, DeleteAny<unsigned>, Sentinel<0>>);
 static_assert(!ResourceFormable<unsigned, DeleteAny<unsigned>, Sentinel<-1>>);
 static_assert(
     !ResourceFormable<ThrowingBooleanHandle, DeleteThrowingBooleanHandle, Sentinel<ThrowingBooleanHandle{-1}>>);
-static_assert(!DefaultResourceFormable<ThrowingBooleanHandle, DeleteThrowingBooleanHandle>);
+static_assert(DefaultResourceFormable<ThrowingBooleanHandle, DeleteThrowingBooleanHandle>);
 
 constexpr auto unsignedSentinelScenario() -> bool {
     auto empty = Resource<unsigned, DeleteAny<unsigned>, Sentinel<0>>{};
@@ -722,10 +676,6 @@ static_assert(EngagementFor<OpaqueCompoundEngagement, OpaqueCompound>);
 static_assert(DefaultResourceFormable<int, ReturningDelete>);
 static_assert(DefaultResourceFormable<int, PotentiallyThrowingInvokeDelete>);
 static_assert(!DefaultResourceFormable<ThrowingMoveValue, DeleteThrowingMoveValue>);
-static_assert(MalformedHandle{-1} == MalformedHandle{-1});
-static_assert(!DefaultResourceFormable<MalformedHandle, DeleteMalformed>);
-static_assert(!DefaultResourceFormable<MissingSentinelValueHandle, DeleteMissingSentinelValue>);
-static_assert(ResourceFormable<MalformedHandle, DeleteMalformed, Sentinel<MalformedHandle{-1}>>);
 
 static_assert(std::is_default_constructible_v<Resource<int, NoopDelete>>);
 static_assert(std::is_constructible_v<Resource<int, CountDelete>, CountDelete>);
@@ -765,19 +715,25 @@ constexpr auto constantEvaluationScenario() -> bool {
 
 static_assert(constantEvaluationScenario());
 
-TEST(ResourceTest, PointerNullIsDisengagedByDefault) {
+TEST(ResourceTest, PointerNullIsEngagedByDefault) {
     auto resource = Resource{static_cast<int*>(nullptr), EmptyPointerDelete{}};
+
+    EXPECT_TRUE(resource);
+}
+
+TEST(ResourceTest, ExplicitNullSentinelIsDisengaged) {
+    auto resource = Resource{static_cast<int*>(nullptr), EmptyPointerDelete{}, sentinel<nullptr>};
 
     EXPECT_FALSE(resource);
 }
 
-TEST(ResourceTest, ProjectedDefaultSentinelSupportsNonStructuralHandle) {
+TEST(ResourceTest, ProjectedExplicitEngagementSupportsNonStructuralHandle) {
     auto resource = OpaqueCompoundResource{OpaqueCompound{31, OpaqueHandle{-1}}, DeleteOpaqueCompound{}};
 
     EXPECT_FALSE(resource);
 }
 
-TEST(ResourceTest, FundamentalValueHasNoImplicitSentinel) {
+TEST(ResourceTest, DefaultEngagementTreatsEverySuppliedValueAsOwned) {
     auto count = 0;
     auto resource = Resource{-1, CountDelete{&count}};
 
@@ -807,26 +763,26 @@ TEST(ResourceTest, PredicateEngagementUsesItsCanonicalDisengagementTransition) {
     EXPECT_FALSE(resource);
 }
 
-TEST(ResourceTest, StrongHandleUsesDefaultSentinel) {
+TEST(ResourceTest, StrongHandleHasNoImplicitSentinel) {
     auto count = 0;
     auto resource = Resource{StrongHandle{-1}, CountStrongDelete{&count}};
 
-    EXPECT_FALSE(resource);
+    EXPECT_TRUE(resource);
 }
 
-TEST(ResourceTest, EnumUsesDefaultSentinel) {
+TEST(ResourceTest, EnumHasNoImplicitSentinel) {
     auto resource = Resource{EnumHandle::invalid, DeleteEnum{}};
 
-    EXPECT_FALSE(resource);
+    EXPECT_TRUE(resource);
 }
 
-TEST(ResourceTest, NonStructuralHandleUsesDefaultSentinel) {
+TEST(ResourceTest, NonStructuralHandleHasNoImplicitSentinel) {
     auto resource = Resource{OpaqueHandle{-1}, DeleteOpaque{}};
 
-    EXPECT_FALSE(resource);
+    EXPECT_TRUE(resource);
 }
 
-TEST(ResourceTest, UnspecializedClassUsesOutOfBandEngagement) {
+TEST(ResourceTest, ClassValueUsesDefaultOptionalEngagement) {
     auto resource = Resource{PlainHandle{-1}, DeletePlain{}};
 
     EXPECT_TRUE(resource);

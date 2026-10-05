@@ -4,25 +4,22 @@ Resource is a small C++26 RAII owner for external resource identities. It fills 
 
 A resource can be a `FILE*`, an integer handle, an enum, or a compound value that contains the bookkeeping required for cleanup. Resource owns that identity uniquely, invokes an explicit deleter when ownership ends, and does not allocate memory or add indirection of its own.
 
-The common pointer-shaped case is direct:
+A POSIX file descriptor shows the basic model:
 
 ```cpp
-#include <cstdlib>
+#include <fcntl.h>
+#include <unistd.h>
+
 #include <resource/resource.hpp>
 
-struct FreeMemory final {
-    auto operator()(void* const& memory) const noexcept -> void {
-        std::free(memory);
-    }
-};
-
-auto memory = resource::Resource{
-    std::malloc(4096),
-    FreeMemory{},
+auto file = resource::Resource{
+    ::open("settings.txt", O_RDONLY),
+    &::close,
+    resource::sentinel<-1>,
 };
 ```
 
-Pointers use `nullptr` as their disengaged representation automatically. If `malloc` fails, `memory` is disengaged. Otherwise, `FreeMemory` runs when ownership ends.
+Resource uses optional-backed engagement by default because it is valid for every resource identity. The explicit `sentinel<-1>` opts this file descriptor into an in-band representation where `-1` means disengaged.
 
 Resource is header-only. Its public header is `<resource/resource.hpp>`.
 
@@ -34,7 +31,7 @@ Resource is header-only. Its public header is `<resource/resource.hpp>`.
 - `Deleter` destroys the external resource identified by a `Value`.
 - `Engagement`, when present, describes how a `Value` represents whether Resource owns a resource.
 
-The third parameter normally does not need to be written. Resource selects a default representation when it can and otherwise stores engagement state out of band.
+The third parameter normally does not need to be written. Without an Engagement, Resource stores engagement state separately from `Value` using optional-backed storage. A supplied `Value` is therefore always treated as an owned identity, regardless of its bit pattern.
 
 A `Value` is identity, not mutable application state. It must be an unqualified non-array object type that is nothrow move-constructible and nothrow destructible. `get()` always observes that identity as `Value const&`. For non-pointer identities, `operator*` and `operator->` provide the same const-only contained-value access.
 
@@ -44,9 +41,9 @@ Resource is noncopyable. Moving transfers ownership and leaves the source diseng
 
 ## Engagement and storage
 
-The general representation uses `std::optional<Value>` internally. Engagement state then lives outside `Value`, so every contained value is considered engaged.
+The default representation uses `std::optional<Value>` internally. Engagement state then lives outside `Value`, so every contained value is considered engaged. This is the canonical representation because it does not assume that any particular `Value` means invalid.
 
-When a value has a safe in-band disengaged representation, Resource can avoid that extra engagement state. An Engagement supplies two static operations:
+When a value has a safe in-band disengaged representation, Resource can avoid that extra engagement state by opting into an Engagement. An Engagement supplies two static operations:
 
 ```cpp
 Engagement::engaged(value);
@@ -55,15 +52,11 @@ Engagement::disengage(value);
 
 Both operations must be nonthrowing. `engaged` reports whether the value identifies an owned resource. `disengage` changes it to a representation that does not own a resource. Engagement is compile-time behavior; Resource does not store an Engagement object.
 
-In-band Engagement is an optimization, not a requirement. If a value cannot make the required transition with ordinary nonthrowing operations, use the default optional-backed representation instead.
-
-### Pointers
-
-Pointers automatically use `nullptr` as their sentinel, so the opening `FILE*` example needs no explicit Engagement.
+In-band Engagement is an optimization, not a requirement. Resource never infers one from the C++ type. A pointer does not imply `nullptr`, an integer does not imply `0` or `-1`, and a class or enum does not imply a distinguished invalid value. If no explicit Engagement is supplied, Resource uses the default optional-backed representation.
 
 ### Explicit sentinels
 
-Fundamental values do not receive an inferred sentinel. Resource cannot know whether `0`, `-1`, or another value means invalid for a particular API.
+When an API defines one value as invalid, `Sentinel<V>` makes that rule explicit and allows Resource to store engagement in-band.
 
 On POSIX, a file descriptor can make the `-1` rule explicit:
 
@@ -83,30 +76,9 @@ auto fd = Resource{
 };
 ```
 
-Without `sentinel<-1>`, an `int` uses optional-backed storage and `-1` is treated as an engaged value like any other integer.
+Without `sentinel<-1>`, the file descriptor uses optional-backed storage and `-1` is treated as an engaged value like any other integer. The same rule applies to pointers: an API where `nullptr` means invalid can opt into `sentinel<nullptr>`.
 
 The corresponding Engagement type is `Sentinel<-1>` when the type must be spelled explicitly. The sentinel must brace-construct the resource `Value` without narrowing. That construction, comparison with the canonical sentinel value, and assignment back to the canonical sentinel value must all be nonthrowing.
-
-### Default sentinels for strong types
-
-A distinct class or enum can define its natural sentinel by specializing `DefaultSentinel<Value>` before the first relevant Resource use:
-
-```cpp
-struct SocketHandle {
-    int value;
-
-    friend constexpr auto operator==(SocketHandle const&, SocketHandle const&) noexcept -> bool = default;
-};
-
-template <>
-struct resource::DefaultSentinel<SocketHandle> {
-    static constexpr auto value = SocketHandle{-1};
-};
-```
-
-Resource then selects that sentinel automatically for `SocketHandle`. The stored sentinel must brace-construct `SocketHandle` without narrowing, and the resulting construction, comparison, and assignment operations must be nonthrowing. Unlike `Sentinel<V>`, the customization stores its sentinel in a static value, so the sentinel itself does not need to be representable as a non-type template argument. `DefaultSentinel` is intentionally limited to class and enum types; aliased fundamental handles still need an explicit sentinel because the alias does not create a distinct C++ type.
-
-A malformed or late `DefaultSentinel` specialization is an error rather than a request to fall back silently to optional-backed storage. The specialization must be visible before the first relevant Resource use and reachable from every use that depends on the default selection.
 
 ### Predicate Engagements
 
@@ -172,13 +144,13 @@ auto image = resource::Resource{
 };
 ```
 
-`ProjectedEngagement` can delegate to any Engagement, including a predicate Engagement. If its second template argument is omitted, it uses the projected member's normal default Engagement when one exists. The `projectedEngagement` and `projectedSentinel` tag objects provide the corresponding CTAD forms.
+`ProjectedEngagement` can delegate to any explicit Engagement, including a predicate Engagement. There is no implicit projected policy because the default Resource representation stores engagement independently of `Value`; there is nothing value-derived to project. The `projectedEngagement` and `projectedSentinel` tag objects provide the corresponding CTAD forms.
 
 ## Empty Resource objects
 
 Resource can begin empty only when it can construct a known-safe disengaged state.
 
-Optional-backed storage can always begin empty because it does not need to construct a `Value`. Whole-value `Sentinel` and `DefaultSentinel` cases can also begin empty because Resource knows the complete disengaged value.
+Optional-backed storage can always begin empty because it does not need to construct a `Value`. A whole-value `Sentinel` can also begin empty because Resource knows the complete disengaged value.
 
 Arbitrary predicate Engagements and projected Engagements do not automatically gain empty construction. Resource will not default-construct a `Value` and then call `disengage`, because that default-constructed value might already identify a live external resource. A projected Engagement also does not define safe values for the other members of a compound identity.
 
@@ -241,6 +213,7 @@ struct CloseFile final {
 auto file = resource::Resource{
     std::fopen("settings.txt", "r"),
     CloseFile{},
+    resource::sentinel<nullptr>,
 };
 ```
 
@@ -252,6 +225,7 @@ auto file = resource::Resource{
     [](std::FILE* const& stream) noexcept {
         return std::fclose(stream);
     },
+    resource::sentinel<nullptr>,
 };
 ```
 
@@ -284,15 +258,22 @@ Move assignment exists only when both the deleter and selected storage support o
 
 Optional-backed storage can still support some move-constructible but non-move-assignable `Value` types because `std::optional` provides a real lifetime boundary for its contained object. In-band Engagement instead relies on ordinary nonthrowing mutation to restore disengagement.
 
-For a pointer identity with an empty deleter, the in-band representation is designed to occupy one pointer:
+For a pointer identity with an empty deleter, an explicit in-band sentinel can reduce the representation to one pointer:
 
 ```cpp
 struct EmptyDelete {
     auto operator()(int* const&) const noexcept -> void {}
 };
 
-static_assert(sizeof(resource::Resource<int*, EmptyDelete>) == sizeof(int*));
+using PointerResource = resource::Resource<
+    int*,
+    EmptyDelete,
+    resource::Sentinel<nullptr>>;
+
+static_assert(sizeof(PointerResource) == sizeof(int*));
 ```
+
+The default `Resource<int*, EmptyDelete>` instead uses optional-backed engagement. Its representation may be larger because Resource does not assume that `nullptr` means disengaged.
 
 ## Using Resource with CMake
 
