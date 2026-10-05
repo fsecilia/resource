@@ -613,7 +613,13 @@ static_assert(!std::constructible_from<AmbiguousResource, AmbiguousResourceArgum
 static_assert(!std::constructible_from<SelfDeletingResource, SelfDeletingValue>);
 static_assert(std::constructible_from<SelfDeletingResource, SelfDeletingValue, SelfDeletingValue>);
 static_assert(std::constructible_from<OpaqueResource, int>);
+static_assert(std::constructible_from<OpaqueResource, int, DeleteOpaque>);
+static_assert(std::constructible_from<Resource<OpaqueHandle, DeleteOpaque, OpaqueHandleEngagement>, int, DeleteOpaque,
+    OpaqueHandleEngagement>);
+static_assert(std::constructible_from<AmbiguousResource, AmbiguousResourceArgument, AmbiguousResourceArgument>);
+static_assert(!std::constructible_from<Resource<unsigned, NoopDelete>, int, NoopDelete>);
 static_assert(!std::constructible_from<Resource<AggregateHandle, DeleteAggregateHandle>, int>);
+static_assert(!std::constructible_from<Resource<AggregateHandle, DeleteAggregateHandle>, int, DeleteAggregateHandle>);
 static_assert(!std::constructible_from<Resource<AggregateHandle, DeleteAggregateHandle>, AggregateHandleArgument>);
 static_assert(std::constructible_from<Resource<AggregateHandle, DeleteAggregateHandle>, AggregateHandle>);
 static_assert(!std::constructible_from<Resource<int*, AggregateDelete>, int>);
@@ -1259,6 +1265,18 @@ TEST(ResourceTest, ScalarSentinelConstructionCanonicalizesDisengagedValue) {
     EXPECT_FALSE(resource);
 }
 
+TEST(ResourceTest, DefaultDeleterConstructionPreservesDisengagedValueAcrossMove) {
+    auto resource = MoveChangingScalarResource{MoveChangingHandle{-1}};
+
+    EXPECT_FALSE(resource);
+}
+
+TEST(ResourceTest, DefaultDeleterConstructionAcceptsShapedDisengagedValue) {
+    auto resource = MoveChangingScalarResource{-1};
+
+    EXPECT_FALSE(resource);
+}
+
 TEST(ResourceTest, ScalarMoveFromDisengagedSourceKeepsDestinationDisengaged) {
     auto source = MoveChangingScalarResource{MoveChangingHandle{-1}, DestroyMoveChangingHandle{}};
 
@@ -1427,6 +1445,12 @@ TEST(ResourceTest, UnambiguousConvertibleValueArgumentCreatesResource) {
     auto resource = OpaqueResource{7};
 
     EXPECT_EQ(resource.get(), OpaqueHandle{7});
+}
+
+TEST(ResourceTest, SuppliedDeleterAcceptsExplicitlyConstructibleValueArgument) {
+    auto resource = OpaqueResource{11, DeleteOpaque{}};
+
+    EXPECT_EQ(resource.get(), OpaqueHandle{11});
 }
 
 TEST(ResourceTest, ExplicitlyConstructibleDeleterArgumentCreatesEmptyResource) {

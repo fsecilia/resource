@@ -137,6 +137,14 @@ namespace detail {
 template <typename Engagement, typename Value>
 concept EngagementSelectionFor = std::same_as<Engagement, NoEngagement> || EngagementFor<Engagement, Value>;
 
+template <typename Target, typename Argument>
+concept BraceConstructibleFrom = requires(Argument&& argument) { Target{std::forward<Argument>(argument)}; };
+
+template <typename Target, typename Argument>
+concept NothrowBraceConstructibleFrom = requires(Argument&& argument) {
+    { Target{std::forward<Argument>(argument)} } noexcept;
+};
+
 template <typename Engagement, ResourceValue Value>
 struct DisengagedValueFactory;
 
@@ -162,6 +170,11 @@ public:
 
     explicit constexpr OptionalStorage(Value&& value) noexcept
         : value_{std::in_place, std::move(value)} {}
+
+    template <typename ValueArg>
+        requires(!std::same_as<std::remove_cvref_t<ValueArg>, Value>) && BraceConstructibleFrom<Value, ValueArg>
+    explicit constexpr OptionalStorage(ValueArg&& value) noexcept(NothrowBraceConstructibleFrom<Value, ValueArg>)
+        : value_{std::in_place, std::forward<ValueArg>(value)} {}
 
     constexpr OptionalStorage(OptionalStorage const&) = delete;
     constexpr auto operator=(OptionalStorage const&) -> OptionalStorage& = delete;
@@ -218,6 +231,15 @@ public:
 
     explicit constexpr EngagementStorage(Value&& value) noexcept
         : EngagementStorage{std::move(value), Engagement::engaged(value)} {}
+
+    template <typename ValueArg>
+        requires(!std::same_as<std::remove_cvref_t<ValueArg>, Value>) && BraceConstructibleFrom<Value, ValueArg>
+    explicit constexpr EngagementStorage(ValueArg&& value) noexcept(NothrowBraceConstructibleFrom<Value, ValueArg>)
+        : value_{std::forward<ValueArg>(value)} {
+        if (!Engagement::engaged(value_)) {
+            Engagement::disengage(value_);
+        }
+    }
 
     constexpr EngagementStorage(EngagementStorage const&) = delete;
     constexpr auto operator=(EngagementStorage const&) -> EngagementStorage& = delete;
@@ -282,14 +304,6 @@ template <ResourceValue Value, typename Engagement>
     requires EngagementSelectionFor<Engagement, Value>
 using StorageForT = StorageFor<Value, Engagement>::Type;
 
-template <typename Target, typename Argument>
-concept BraceConstructibleFrom = requires(Argument&& argument) { Target{std::forward<Argument>(argument)}; };
-
-template <typename Target, typename Argument>
-concept NothrowBraceConstructibleFrom = requires(Argument&& argument) {
-    { Target{std::forward<Argument>(argument)} } noexcept;
-};
-
 template <typename Argument, typename Target>
 concept ExactArgument = std::same_as<std::remove_cvref_t<Argument>, Target>;
 
@@ -331,9 +345,9 @@ public:
         requires detail::ValueArgument<ValueArg, Value, Deleter> && detail::BraceConstructibleFrom<Value, ValueArg> &&
                      std::is_nothrow_default_constructible_v<Deleter> && (!std::is_pointer_v<Deleter>) &&
                      (!std::is_member_pointer_v<Deleter>)
-    explicit constexpr Resource(ValueArg&& value) noexcept(noexcept(Value{std::forward<ValueArg>(value)}))
+    explicit constexpr Resource(ValueArg&& value) noexcept(detail::NothrowBraceConstructibleFrom<Value, ValueArg>)
         : deleter_{},
-          storage_{Value{std::forward<ValueArg>(value)}} {}
+          storage_{std::forward<ValueArg>(value)} {}
 
     /// Constructs an empty Resource with the supplied deleter.
     template <typename DeleterArg>
@@ -344,32 +358,23 @@ public:
         : deleter_{Deleter{std::forward<DeleterArg>(deleter)}},
           storage_{} {}
 
-    /// Adopts a copy of `value` with the supplied deleter.
-    template <typename DeleterArg>
-        requires std::is_copy_constructible_v<Value> && detail::NothrowBraceConstructibleFrom<Deleter, DeleterArg>
-    constexpr Resource(Value const& value, DeleterArg&& deleter) noexcept(std::is_nothrow_copy_constructible_v<Value>)
+    /// Adopts a resource identity with the supplied deleter.
+    template <typename ValueArg, typename DeleterArg>
+        requires detail::SingleArgumentConstructible<ValueArg, Value> &&
+                     detail::BraceConstructibleFrom<Value, ValueArg> &&
+                     detail::NothrowBraceConstructibleFrom<Deleter, DeleterArg>
+    constexpr Resource(ValueArg&& value, DeleterArg&& deleter) noexcept(
+        detail::NothrowBraceConstructibleFrom<Value, ValueArg>)
         : deleter_{std::forward<DeleterArg>(deleter)},
-          storage_{value} {}
+          storage_{std::forward<ValueArg>(value)} {}
 
-    /// Adopts `value` by move with the supplied deleter.
-    template <typename DeleterArg>
-        requires detail::NothrowBraceConstructibleFrom<Deleter, DeleterArg>
-    constexpr Resource(Value&& value, DeleterArg&& deleter) noexcept
-        : deleter_{std::forward<DeleterArg>(deleter)},
-          storage_{std::move(value)} {}
-
-    /// Adopts a copy of `value` with the supplied deleter and explicit Engagement.
-    template <typename DeleterArg>
-        requires std::is_copy_constructible_v<Value> && detail::NothrowBraceConstructibleFrom<Deleter, DeleterArg>
-    constexpr Resource(Value const& value, DeleterArg&& deleter, Engagement) noexcept(
-        std::is_nothrow_copy_constructible_v<Value>)
-        : Resource{value, std::forward<DeleterArg>(deleter)} {}
-
-    /// Adopts `value` by move with the supplied deleter and explicit Engagement.
-    template <typename DeleterArg>
-        requires detail::NothrowBraceConstructibleFrom<Deleter, DeleterArg>
-    constexpr Resource(Value&& value, DeleterArg&& deleter, Engagement) noexcept
-        : Resource{std::move(value), std::forward<DeleterArg>(deleter)} {}
+    /// Adopts a resource identity with the supplied deleter and explicit Engagement.
+    template <typename ValueArg, typename DeleterArg>
+        requires detail::SingleArgumentConstructible<ValueArg, Value> &&
+        detail::BraceConstructibleFrom<Value, ValueArg> && detail::NothrowBraceConstructibleFrom<Deleter, DeleterArg>
+    constexpr Resource(ValueArg&& value, DeleterArg&& deleter, Engagement) noexcept(
+        detail::NothrowBraceConstructibleFrom<Value, ValueArg>)
+        : Resource{std::forward<ValueArg>(value), std::forward<DeleterArg>(deleter)} {}
 
     /// Copy construction is disabled because ownership is unique.
     constexpr Resource(Resource const&) = delete;
