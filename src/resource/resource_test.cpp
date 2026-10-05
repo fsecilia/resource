@@ -919,6 +919,13 @@ TEST(ResourceTest, ResetRejectsOwnedValueReference) {
 
     EXPECT_DEBUG_DEATH(resource.reset(resource.get()), "owns\\(\\)");
 }
+
+TEST(ResourceTest, ResetRejectsOwnedValueConstRvalue) {
+    auto count = 0;
+    auto resource = Resource{7, CountDelete{&count}};
+
+    EXPECT_DEBUG_DEATH(resource.reset(std::move(resource.get())), "owns\\(\\)");
+}
 #endif
 
 TEST(ResourceTest, DestructionInvokesDeleterExactlyOnce) {

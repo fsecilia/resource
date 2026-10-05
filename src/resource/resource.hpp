@@ -481,7 +481,7 @@ public:
         requires detail::SingleArgumentConstructible<ValueArg, Value> && std::constructible_from<Storage, ValueArg> &&
         std::is_nothrow_move_assignable_v<Storage>
     constexpr auto reset(ValueArg&& value) noexcept(std::is_nothrow_constructible_v<Storage, ValueArg>) -> void {
-        if constexpr (detail::ExactArgument<ValueArg, Value> && std::is_lvalue_reference_v<ValueArg>) {
+        if constexpr (detail::ExactArgument<ValueArg, Value>) {
             assert(!owns() || std::addressof(value) != std::addressof(get()));
         }
 
