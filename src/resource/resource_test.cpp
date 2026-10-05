@@ -649,6 +649,8 @@ static_assert(std::same_as<decltype(Resource{7, CountDelete{nullptr}, NonNegativ
 static_assert(std::same_as<decltype(Resource{StrongHandle{7}, CountStrongDelete{nullptr}}),
     Resource<StrongHandle, CountStrongDelete>>);
 static_assert(std::same_as<decltype(Resource{EnumHandle::valid, DeleteEnum{}}), Resource<EnumHandle, DeleteEnum>>);
+static_assert(std::same_as<decltype(Resource{EnumHandle::valid, DeleteEnum{}, sentinel<-1>}),
+    Resource<EnumHandle, DeleteEnum, Sentinel<-1>>>);
 static_assert(std::same_as<decltype(Resource{OpaqueHandle{7}, DeleteOpaque{}}), OpaqueResource>);
 static_assert(std::same_as<decltype(Resource{Compound{3, StrongHandle{7}}, DestroyCompound{nullptr},
                                projectedSentinel<&Compound::handle, StrongHandle{-1}>}),
