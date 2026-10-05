@@ -1160,6 +1160,16 @@ TEST(ResourceTest, MoveAssignmentDisengagesSource) {
     EXPECT_FALSE(source);
 }
 
+TEST(ResourceTest, SentinelMoveAssignmentFromEmptyDisengagesDestination) {
+    auto count = 0;
+    auto destination = Resource{5, CountDelete{&count}, sentinel<-1>};
+    auto source = Resource{-1, CountDelete{&count}, sentinel<-1>};
+
+    destination = std::move(source);
+
+    EXPECT_FALSE(destination);
+}
+
 TEST(ResourceTest, MoveAssignmentUsesNothrowDeleterAssignment) {
     auto operation = DeleterMoveOperation::none;
     auto destination = Resource{5, NothrowMoveAssignableDelete{&operation}, sentinel<-1>};
@@ -1319,6 +1329,16 @@ TEST(ResourceTest, ProjectedMoveAssignmentDisengagesSource) {
     destination = std::move(source);
 
     EXPECT_FALSE(source);
+}
+
+TEST(ResourceTest, ProjectedMoveAssignmentFromEmptyDisengagesDestination) {
+    auto count = 0;
+    auto destination = CompoundResource{Compound{31, StrongHandle{5}}, DestroyCompound{&count}};
+    auto source = CompoundResource{Compound{53, StrongHandle{-1}}, DestroyCompound{&count}};
+
+    destination = std::move(source);
+
+    EXPECT_FALSE(destination);
 }
 
 TEST(ResourceTest, ProjectedConstructionCanonicalizesDisengagedProjection) {
