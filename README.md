@@ -19,7 +19,7 @@ auto file = resource::Resource{
 };
 ```
 
-Resource uses optional-backed engagement by default because it is valid for every resource identity. The explicit `sentinel<-1>` opts this file descriptor into an in-band representation where `-1` means disengaged.
+Resource uses optional-backed engagement by default because it makes no assumption about which values mean no resource. The explicit `sentinel<-1>` opts this file descriptor into an in-band representation where `-1` means disengaged.
 
 Resource is header-only. Its public header is `<resource/resource.hpp>`.
 
@@ -43,7 +43,7 @@ Resource is noncopyable. Moving transfers ownership and leaves the source diseng
 
 The default representation uses `std::optional<Value>` internally. Engagement state then lives outside `Value`, so every contained value is considered engaged. This is the canonical representation because it does not assume that any particular `Value` means invalid.
 
-When a value has a safe in-band disengaged representation, Resource can avoid that extra engagement state by opting into an Engagement. An Engagement supplies two static operations:
+When a value has a known in-band disengaged representation, Resource can avoid that extra engagement state by opting into an Engagement. An Engagement supplies two static operations:
 
 ```cpp
 Engagement::engaged(value);
