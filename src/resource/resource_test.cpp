@@ -1177,6 +1177,47 @@ TEST(ResourceTest, OptionalStorageCanResetNonAssignableValue) {
     EXPECT_EQ(resource.get().value, 7);
 }
 
+TEST(ResourceTest, OptionalMoveAssignmentDestroysEngagedDestinationOnce) {
+    auto count = 0;
+    auto destination = Resource{5, CountDelete{&count}};
+    auto source = Resource{7, CountDelete{&count}};
+
+    destination = std::move(source);
+
+    EXPECT_EQ(count, 1);
+}
+
+TEST(ResourceTest, OptionalMoveAssignmentReconstructsEngagedNonAssignableDestination) {
+    using NonAssignableResource = Resource<OptionalNonAssignable, DeleteOptionalNonAssignable>;
+
+    auto destination = NonAssignableResource{OptionalNonAssignable{5}, DeleteOptionalNonAssignable{}};
+    auto source = NonAssignableResource{OptionalNonAssignable{7}, DeleteOptionalNonAssignable{}};
+
+    destination = std::move(source);
+
+    EXPECT_EQ(destination.get().value, 7);
+}
+
+TEST(ResourceTest, OptionalMoveAssignmentFromEmptyDestroysDestinationOnce) {
+    auto count = 0;
+    auto destination = Resource{5, CountDelete{&count}};
+    auto source = Resource<int, CountDelete>{CountDelete{&count}};
+
+    destination = std::move(source);
+
+    EXPECT_EQ(count, 1);
+}
+
+TEST(ResourceTest, OptionalMoveAssignmentFromEmptyDisengagesDestination) {
+    auto count = 0;
+    auto destination = Resource{5, CountDelete{&count}};
+    auto source = Resource<int, CountDelete>{CountDelete{&count}};
+
+    destination = std::move(source);
+
+    EXPECT_FALSE(destination);
+}
+
 TEST(ResourceTest, ScalarSentinelConstructionCanonicalizesDisengagedValue) {
     auto resource = MoveChangingScalarResource{MoveChangingHandle{-1}, DestroyMoveChangingHandle{}};
 
