@@ -556,10 +556,6 @@ concept ProjectedEngagementNameable = requires { typename ProjectedEngagement<pr
 constexpr auto deleteInt(int const&) noexcept -> void {
 }
 
-} // namespace
-
-namespace {
-
 using PointerResource = Resource<int*, EmptyPointerDelete>;
 using PointerSentinelResource = Resource<int*, EmptyPointerDelete, Sentinel<nullptr>>;
 using PointerObjectResource = Resource<PointerObject*, EmptyPointerObjectDelete>;
