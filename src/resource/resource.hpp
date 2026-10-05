@@ -298,7 +298,7 @@ concept SingleArgumentConstructible =
     ExactArgument<Argument, Target> || (!std::is_aggregate_v<Target> && BraceConstructibleFrom<Target, Argument>);
 
 template <typename Argument, typename Target>
-concept SingleArgumentShaped = SingleArgumentConstructible<Argument, Target> || std::convertible_to<Argument, Target>;
+concept SingleArgumentShaped = SingleArgumentConstructible<Argument, Target>;
 
 template <typename Argument, typename Value>
 concept ValueShapedArgument = SingleArgumentShaped<Argument, Value>;

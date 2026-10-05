@@ -86,9 +86,16 @@ struct ContextDelete final {
     constexpr auto operator()(int const&) const noexcept -> void {}
 };
 
-struct AmbiguousResourceArgument final {
-    constexpr operator int() const noexcept { return 7; }
-    constexpr operator ContextDelete() const noexcept { return ContextDelete{11}; }
+struct AmbiguousResourceArgument final {};
+
+struct AmbiguousValue final {
+    constexpr explicit AmbiguousValue(AmbiguousResourceArgument) noexcept {}
+};
+
+struct AmbiguousDelete final {
+    constexpr explicit AmbiguousDelete(AmbiguousResourceArgument) noexcept {}
+
+    constexpr auto operator()(AmbiguousValue const&) const noexcept -> void {}
 };
 
 struct ExplicitDeleteArgument final {};
@@ -213,6 +220,15 @@ struct NarrowingDelete final {
         : tag{value} {}
 
     constexpr auto operator()(int const&) const noexcept -> void {}
+
+    int tag;
+};
+
+struct IntTaggedUnsignedDelete final {
+    constexpr explicit IntTaggedUnsignedDelete(int value) noexcept
+        : tag{value} {}
+
+    constexpr auto operator()(unsigned const&) const noexcept -> void {}
 
     int tag;
 };
@@ -553,6 +569,8 @@ using ContextDeleteResource = Resource<int, ContextDelete>;
 using ExplicitDeleteResource = Resource<int, ExplicitDelete>;
 using NarrowingDeleteResource = Resource<int, NarrowingDelete>;
 using NarrowingDeleteSentinelResource = Resource<int, NarrowingDelete, Sentinel<-1>>;
+using NarrowingValueResource = Resource<unsigned, IntTaggedUnsignedDelete>;
+using AmbiguousResource = Resource<AmbiguousValue, AmbiguousDelete>;
 using SelfDeletingResource = Resource<SelfDeletingValue, SelfDeletingValue>;
 using MemberDelete = void (MemberDeletedValue::*)() const noexcept;
 using MemberDeleteResource = Resource<MemberDeletedValue, MemberDelete>;
@@ -589,7 +607,7 @@ static_assert(!std::constructible_from<NarrowingDeleteSentinelResource, int, lon
 static_assert(!std::constructible_from<NarrowingDeleteSentinelResource, int const&, long, Sentinel<-1>>);
 static_assert(std::constructible_from<NarrowingDeleteSentinelResource, int, int, Sentinel<-1>>);
 static_assert(std::constructible_from<NarrowingDeleteSentinelResource, int const&, int, Sentinel<-1>>);
-static_assert(!std::constructible_from<ContextDeleteResource, AmbiguousResourceArgument>);
+static_assert(!std::constructible_from<AmbiguousResource, AmbiguousResourceArgument>);
 static_assert(!std::constructible_from<SelfDeletingResource, SelfDeletingValue>);
 static_assert(std::constructible_from<SelfDeletingResource, SelfDeletingValue, SelfDeletingValue>);
 static_assert(std::constructible_from<OpaqueResource, int>);
@@ -599,6 +617,7 @@ static_assert(std::constructible_from<Resource<AggregateHandle, DeleteAggregateH
 static_assert(!std::constructible_from<Resource<int*, AggregateDelete>, int>);
 static_assert(std::constructible_from<Resource<int*, AggregateDelete>, AggregateDelete>);
 static_assert(!std::constructible_from<Resource<unsigned, NoopDelete>, int>);
+static_assert(std::constructible_from<NarrowingValueResource, int>);
 static_assert(!std::constructible_from<FunctionDeleteResource, int>);
 static_assert(noexcept(std::declval<PointerResource&>().reset()));
 static_assert(noexcept(std::declval<PointerResource&>().release()));
