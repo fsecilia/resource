@@ -25,6 +25,6 @@ if (PROJECT_IS_TOP_LEVEL AND BUILD_TESTING)
         Resource::Resource
         GTest::gtest_main
     )
-    add_test(NAME ResourceTest COMMAND ResourceTest)
+    add_test(NAME resource.unit COMMAND ResourceTest)
     canon_apply_target(ResourceTest)
 endif()
