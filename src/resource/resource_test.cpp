@@ -868,16 +868,14 @@ TEST(ResourceTest, ResetDoesNotUseValueEqualityAsResourceIdentity) {
     EXPECT_EQ(resource.get().value, 9);
 }
 
+#if !defined NDEBUG
 TEST(ResourceTest, ResetRejectsOwnedValueReference) {
-#if defined NDEBUG
-    GTEST_SKIP() << "internal assertions are compiled out (NDEBUG)";
-#else
     auto count = 0;
     auto resource = Resource{7, CountDelete{&count}};
 
     EXPECT_DEBUG_DEATH(resource.reset(resource.get()), "owns\\(\\)");
-#endif
 }
+#endif
 
 TEST(ResourceTest, DestructionInvokesDeleterExactlyOnce) {
     auto count = 0;
@@ -1331,45 +1329,31 @@ TEST(ResourceTest, ProjectedResetWithDisengagedValueStaysDisengaged) {
     EXPECT_FALSE(resource);
 }
 
+#if !defined NDEBUG
 TEST(ResourceTest, GetOnDisengagedResourceDies) {
-#if defined NDEBUG
-    GTEST_SKIP() << "internal assertions are compiled out (NDEBUG)";
-#else
     auto resource = Resource<int, NoopDelete>{};
 
     EXPECT_DEBUG_DEATH(static_cast<void>(resource.get()), "owns\\(\\)");
-#endif
 }
 
 TEST(ResourceTest, DereferenceOnDisengagedResourceDies) {
-#if defined NDEBUG
-    GTEST_SKIP() << "internal assertions are compiled out (NDEBUG)";
-#else
     auto resource = Resource<int, NoopDelete>{};
 
     EXPECT_DEBUG_DEATH(static_cast<void>(*resource), "owns\\(\\)");
-#endif
 }
 
 TEST(ResourceTest, ArrowOnDisengagedResourceDies) {
-#if defined NDEBUG
-    GTEST_SKIP() << "internal assertions are compiled out (NDEBUG)";
-#else
     auto resource = Resource<int, NoopDelete>{};
 
     EXPECT_DEBUG_DEATH(static_cast<void>(resource.operator->()), "owns\\(\\)");
-#endif
 }
 
 TEST(ResourceTest, ReleaseOnDisengagedResourceDies) {
-#if defined NDEBUG
-    GTEST_SKIP() << "internal assertions are compiled out (NDEBUG)";
-#else
     auto resource = Resource<int, NoopDelete>{};
 
     EXPECT_DEBUG_DEATH(static_cast<void>(resource.release()), "owns\\(\\)");
-#endif
 }
+#endif
 
 TEST(ResourceTest, EmptyTypedResourceCanAcquireIdentity) {
     auto count = 0;
