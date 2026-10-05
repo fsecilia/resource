@@ -22,7 +22,7 @@
             "cwd": "${workspaceFolder}",
             "preLaunchTask": "build",
             "MIMode": "gdb",
-            "miDebuggerPath": "/usr/bin/gdb",
+            "miDebuggerPath": "gdb",
             "stopAtEntry": false
         }
     ]
