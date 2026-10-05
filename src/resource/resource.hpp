@@ -56,8 +56,10 @@ concept ResourceDeleter = ResourceValue<Value> && detail::NothrowMovableObject<D
 /// Describes engagement through equality with one in-band sentinel value.
 template <auto sentinelValue>
 struct Sentinel final {
+    /// Value that represents the disengaged state.
     static constexpr auto value = sentinelValue;
 
+    /// Reports whether `candidate` differs from the sentinel value.
     template <typename Value>
         requires detail::NothrowSentinelValue<Value, sentinelValue> && requires(Value const& candidate) {
             { candidate == Value{sentinelValue} } noexcept -> detail::NothrowBooleanConvertible;
@@ -66,6 +68,7 @@ struct Sentinel final {
         return !static_cast<bool>(candidate == Value{sentinelValue});
     }
 
+    /// Replaces `candidate` with the sentinel value.
     template <typename Value>
         requires detail::NothrowSentinelValue<Value, sentinelValue> && requires(Value& candidate) {
             { candidate = Value{sentinelValue} } noexcept;
@@ -94,6 +97,7 @@ concept EngagementFor = ResourceValue<Value> && requires(Value& value, Value con
 template <auto projection, typename Engagement>
     requires std::is_member_object_pointer_v<decltype(projection)>
 struct ProjectedEngagement final {
+    /// Reports engagement using the projected member.
     template <typename Value>
         requires requires(Value const& value) {
             requires std::is_lvalue_reference_v<decltype(std::invoke(projection, value))>;
@@ -104,6 +108,7 @@ struct ProjectedEngagement final {
         return Engagement::engaged(std::invoke(projection, value));
     }
 
+    /// Disengages the projected member.
     template <typename Value>
         requires requires(Value& value) {
             requires std::is_lvalue_reference_v<decltype(std::invoke(projection, value))>;
@@ -387,6 +392,7 @@ public:
         : deleter_{std::move(source.deleter_)},
           storage_{std::move(source.storage_)} {}
 
+    /// Replaces this Resource by transferring ownership from `source`.
     constexpr auto operator=(Resource&& source) noexcept -> Resource&
         requires std::is_nothrow_move_assignable_v<Deleter> && std::is_nothrow_move_assignable_v<Storage>
     {
@@ -507,9 +513,11 @@ private:
     Storage storage_;
 };
 
+/// Deduces Resource from a value and deleter.
 template <ResourceValue Value, ResourceDeleter<Value> Deleter>
 Resource(Value, Deleter) -> Resource<Value, Deleter>;
 
+/// Deduces Resource from a value, deleter, and explicit Engagement.
 template <ResourceValue Value, ResourceDeleter<Value> Deleter, EngagementFor<Value> Engagement>
 Resource(Value, Deleter, Engagement) -> Resource<Value, Deleter, Engagement>;
 
