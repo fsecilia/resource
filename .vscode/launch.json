@@ -11,7 +11,7 @@
             "env": {
                 "GTEST_COLOR": "1"
             },
-            "preLaunchTask": "CMake: build"
+            "preLaunchTask": "build"
         },
         {
             "name": "Debug (gdb)",
@@ -20,7 +20,7 @@
             "program": "${command:cmake.launchTargetPath}",
             "args": [],
             "cwd": "${workspaceFolder}",
-            "preLaunchTask": "CMake: build",
+            "preLaunchTask": "build",
             "MIMode": "gdb",
             "miDebuggerPath": "/usr/bin/gdb",
             "stopAtEntry": false
