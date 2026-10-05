@@ -540,6 +540,10 @@ struct OwnershipProbeDelete final {
 template <typename ResourceType>
 concept DereferenceableResource = requires(ResourceType const& resource) { *resource; };
 
+template <typename ResourceType, typename Argument>
+concept ResettableFrom =
+    requires(ResourceType& resource, Argument&& argument) { resource.reset(std::forward<Argument>(argument)); };
+
 template <typename Value, typename Deleter>
 concept DefaultResourceFormable = requires { typename Resource<Value, Deleter>; };
 
@@ -563,6 +567,7 @@ using ConstPointerResource = Resource<int const*, EmptyConstPointerDelete>;
 using VoidPointerResource = Resource<void*, EmptyVoidPointerDelete>;
 using FunctionPointerResource = Resource<IdentityFunction*, EmptyFunctionPointerDelete>;
 using OpaqueResource = Resource<OpaqueHandle, DeleteOpaque>;
+using OpaqueEngagedResource = Resource<OpaqueHandle, DeleteOpaque, OpaqueHandleEngagement>;
 using OpaqueCompoundEngagement = ProjectedEngagement<&OpaqueCompound::handle, OpaqueHandleEngagement>;
 using OpaqueCompoundResource = Resource<OpaqueCompound, DeleteOpaqueCompound, OpaqueCompoundEngagement>;
 using FunctionDelete = void (*)(int const&) noexcept;
@@ -616,6 +621,11 @@ static_assert(std::constructible_from<OpaqueResource, int>);
 static_assert(std::constructible_from<OpaqueResource, int, DeleteOpaque>);
 static_assert(std::constructible_from<Resource<OpaqueHandle, DeleteOpaque, OpaqueHandleEngagement>, int, DeleteOpaque,
     OpaqueHandleEngagement>);
+static_assert(ResettableFrom<OpaqueResource, int>);
+static_assert(ResettableFrom<OpaqueEngagedResource, int>);
+static_assert(!ResettableFrom<Resource<unsigned, NoopDelete>, int>);
+static_assert(!ResettableFrom<Resource<AggregateHandle, DeleteAggregateHandle>, int>);
+static_assert(!ResettableFrom<Resource<AggregateHandle, DeleteAggregateHandle>, AggregateHandleArgument>);
 static_assert(std::constructible_from<AmbiguousResource, AmbiguousResourceArgument, AmbiguousResourceArgument>);
 static_assert(!std::constructible_from<Resource<unsigned, NoopDelete>, int, NoopDelete>);
 static_assert(!std::constructible_from<Resource<AggregateHandle, DeleteAggregateHandle>, int>);
@@ -1449,6 +1459,22 @@ TEST(ResourceTest, UnambiguousConvertibleValueArgumentCreatesResource) {
 
 TEST(ResourceTest, SuppliedDeleterAcceptsExplicitlyConstructibleValueArgument) {
     auto resource = OpaqueResource{11, DeleteOpaque{}};
+
+    EXPECT_EQ(resource.get(), OpaqueHandle{11});
+}
+
+TEST(ResourceTest, ResetAcceptsExplicitlyConstructibleValueArgument) {
+    auto resource = OpaqueResource{OpaqueHandle{7}, DeleteOpaque{}};
+
+    resource.reset(11);
+
+    EXPECT_EQ(resource.get(), OpaqueHandle{11});
+}
+
+TEST(ResourceTest, InBandResetAcceptsExplicitlyConstructibleValueArgument) {
+    auto resource = OpaqueEngagedResource{OpaqueHandle{7}, DeleteOpaque{}, OpaqueHandleEngagement{}};
+
+    resource.reset(11);
 
     EXPECT_EQ(resource.get(), OpaqueHandle{11});
 }

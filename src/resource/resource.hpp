@@ -164,7 +164,7 @@ class OptionalStorage final {
 public:
     constexpr OptionalStorage() noexcept = default;
 
-    explicit constexpr OptionalStorage(Value const& value)
+    explicit constexpr OptionalStorage(Value const& value) noexcept(std::is_nothrow_copy_constructible_v<Value>)
         requires std::is_copy_constructible_v<Value>
         : value_{std::in_place, value} {}
 
@@ -221,7 +221,7 @@ public:
         requires DisengagedValueConstructible<Engagement, Value>
         : value_{DisengagedValueFactory<Engagement, Value>::make()} {}
 
-    explicit constexpr EngagementStorage(Value const& value)
+    explicit constexpr EngagementStorage(Value const& value) noexcept(std::is_nothrow_copy_constructible_v<Value>)
         requires std::is_copy_constructible_v<Value>
         : value_{value} {
         if (!Engagement::engaged(value)) {
@@ -471,32 +471,21 @@ public:
         static_cast<void>(std::invoke(deleter_, std::as_const(value)));
     }
 
-    /// Replaces the owned identity with a copy of `value`.
-    ///
-    /// The replacement is established before the old resource is destroyed.
-    ///
-    /// \pre If this object owns a resource, `value` does not identify that same
-    /// external resource.
-    constexpr auto reset(Value const& value) noexcept(std::is_nothrow_copy_constructible_v<Value>) -> void
-        requires std::is_copy_constructible_v<Value> && std::is_nothrow_move_assignable_v<Storage>
-    {
-        assert(!owns() || std::addressof(value) != std::addressof(get()));
-
-        auto incoming = Storage{value};
-        reset();
-        storage_ = std::move(incoming);
-    }
-
     /// Replaces the owned identity with `value`.
     ///
     /// The replacement is established before the old resource is destroyed.
     ///
     /// \pre If this object owns a resource, `value` does not identify that same
     /// external resource.
-    constexpr auto reset(Value&& value) noexcept -> void
-        requires std::is_nothrow_move_assignable_v<Storage>
-    {
-        auto incoming = Storage{std::move(value)};
+    template <typename ValueArg>
+        requires detail::SingleArgumentConstructible<ValueArg, Value> && std::constructible_from<Storage, ValueArg> &&
+        std::is_nothrow_move_assignable_v<Storage>
+    constexpr auto reset(ValueArg&& value) noexcept(std::is_nothrow_constructible_v<Storage, ValueArg>) -> void {
+        if constexpr (detail::ExactArgument<ValueArg, Value> && std::is_lvalue_reference_v<ValueArg>) {
+            assert(!owns() || std::addressof(value) != std::addressof(get()));
+        }
+
+        auto incoming = Storage{std::forward<ValueArg>(value)};
         reset();
         storage_ = std::move(incoming);
     }
