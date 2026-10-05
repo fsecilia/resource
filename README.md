@@ -310,13 +310,15 @@ The shared developer presets provide compiler-qualified configure, build, and te
 cmake --workflow --preset gcc-debug
 cmake --workflow --preset gcc-release
 cmake --workflow --preset gcc-asan
+cmake --workflow --preset gcc-tidy
+cmake --workflow --preset gcc-coverage
 ```
 
-Corresponding `clang-*` workflows are available for the Clang cross-check.
+Corresponding `clang-*` workflows are available for the Clang cross-check. The tidy workflows require clang-tidy 21.1.6 or newer. Coverage workflows require gcovr and a compiler-matched coverage backend, then generate the coverage report after tests complete.
 
-The test suite combines focused GoogleTest cases, compile-time assertions, and configure-time compile-fail fixtures for contracts that must be rejected by the language.
+The validation suite combines focused GoogleTest cases, compile-time assertions, and an installed-package integration test.
 
-Formatting uses clang-format 21.1.8 exactly. clang-tidy 21.1.6 is the minimum supported static-analysis version.
+Formatting uses clang-format 21.1.8 exactly.
 
 ## License
 
