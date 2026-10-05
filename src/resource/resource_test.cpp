@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <functional>
 #include <gtest/gtest.h>
+#include <initializer_list>
 #include <memory>
 #include <type_traits>
 #include <utility>
@@ -173,6 +174,38 @@ static_assert(EngagementFor<OpaqueHandleEngagement, OpaqueHandle>);
 
 struct DeleteOpaque final {
     constexpr auto operator()(OpaqueHandle const&) const noexcept -> void {}
+};
+
+enum class ConstructionForm {
+    disengaged,
+    parenthesized,
+    braced,
+};
+
+struct BraceSelectedValue final {
+    ConstructionForm form;
+
+    explicit BraceSelectedValue(int value) noexcept(false)
+        : form{ConstructionForm::parenthesized} {
+        if (value > 0) {
+            throw value;
+        }
+    }
+
+    BraceSelectedValue(std::initializer_list<int>) noexcept
+        : form{ConstructionForm::braced} {}
+};
+
+struct BraceSelectedEngagement final {
+    static auto engaged(BraceSelectedValue const& value) noexcept -> bool {
+        return value.form != ConstructionForm::disengaged;
+    }
+
+    static auto disengage(BraceSelectedValue& value) noexcept -> void { value.form = ConstructionForm::disengaged; }
+};
+
+struct DeleteBraceSelectedValue final {
+    auto operator()(BraceSelectedValue const&) const noexcept -> void {}
 };
 
 struct OpaqueCompound final {
@@ -564,6 +597,8 @@ using VoidPointerResource = Resource<void*, EmptyVoidPointerDelete>;
 using FunctionPointerResource = Resource<IdentityFunction*, EmptyFunctionPointerDelete>;
 using OpaqueResource = Resource<OpaqueHandle, DeleteOpaque>;
 using OpaqueEngagedResource = Resource<OpaqueHandle, DeleteOpaque, OpaqueHandleEngagement>;
+using OptionalBraceSelectedResource = Resource<BraceSelectedValue, DeleteBraceSelectedValue>;
+using InBandBraceSelectedResource = Resource<BraceSelectedValue, DeleteBraceSelectedValue, BraceSelectedEngagement>;
 using OpaqueCompoundEngagement = ProjectedEngagement<&OpaqueCompound::handle, OpaqueHandleEngagement>;
 using OpaqueCompoundResource = Resource<OpaqueCompound, DeleteOpaqueCompound, OpaqueCompoundEngagement>;
 using FunctionDelete = void (*)(int const&) noexcept;
@@ -614,6 +649,8 @@ static_assert(!std::constructible_from<AmbiguousResource, AmbiguousResourceArgum
 static_assert(!std::constructible_from<SelfDeletingResource, SelfDeletingValue>);
 static_assert(std::constructible_from<SelfDeletingResource, SelfDeletingValue, SelfDeletingValue>);
 static_assert(std::constructible_from<OpaqueResource, int>);
+static_assert(std::is_nothrow_constructible_v<OptionalBraceSelectedResource, int, DeleteBraceSelectedValue>);
+static_assert(std::is_nothrow_constructible_v<InBandBraceSelectedResource, int, DeleteBraceSelectedValue>);
 static_assert(std::constructible_from<OpaqueResource, int, DeleteOpaque>);
 static_assert(std::constructible_from<Resource<OpaqueHandle, DeleteOpaque, OpaqueHandleEngagement>, int, DeleteOpaque,
     OpaqueHandleEngagement>);
@@ -758,6 +795,25 @@ constexpr auto constantEvaluationScenario() -> bool {
 }
 
 static_assert(constantEvaluationScenario());
+
+constexpr auto optionalShapedValueConstantEvaluationScenario() -> bool {
+    auto resource = OpaqueResource{5, DeleteOpaque{}};
+    return resource.owns() && resource.get() == OpaqueHandle{5};
+}
+
+static_assert(optionalShapedValueConstantEvaluationScenario());
+
+TEST(ResourceTest, OptionalStorageBraceConstructsShapedValue) {
+    auto resource = OptionalBraceSelectedResource{5, DeleteBraceSelectedValue{}};
+
+    EXPECT_EQ(resource.get().form, ConstructionForm::braced);
+}
+
+TEST(ResourceTest, EngagementStorageBraceConstructsShapedValue) {
+    auto resource = InBandBraceSelectedResource{5, DeleteBraceSelectedValue{}};
+
+    EXPECT_EQ(resource.get().form, ConstructionForm::braced);
+}
 
 TEST(ResourceTest, PointerNullIsEngagedByDefault) {
     auto resource = Resource{static_cast<int*>(nullptr), EmptyPointerDelete{}};

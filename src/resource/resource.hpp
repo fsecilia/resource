@@ -171,10 +171,15 @@ public:
     explicit constexpr OptionalStorage(Value&& value) noexcept
         : value_{std::in_place, std::move(value)} {}
 
+    // transform constructs the contained Value directly from the returned prvalue,
+    // preserving brace construction without an intermediate move.
     template <typename ValueArg>
         requires(!std::same_as<std::remove_cvref_t<ValueArg>, Value>) && BraceConstructibleFrom<Value, ValueArg>
     explicit constexpr OptionalStorage(ValueArg&& value) noexcept(NothrowBraceConstructibleFrom<Value, ValueArg>)
-        : value_{std::in_place, std::forward<ValueArg>(value)} {}
+        : value_{std::optional<bool>{true}.transform(
+              [&value](bool) noexcept(NothrowBraceConstructibleFrom<Value, ValueArg>) -> Value {
+                  return Value{std::forward<ValueArg>(value)};
+              })} {}
 
     constexpr OptionalStorage(OptionalStorage const&) = delete;
     constexpr auto operator=(OptionalStorage const&) -> OptionalStorage& = delete;
