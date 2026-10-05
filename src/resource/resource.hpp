@@ -29,6 +29,11 @@ template <typename Type>
 concept NothrowBooleanConvertible =
     std::convertible_to<Type, bool> && noexcept(static_cast<bool>(std::declval<Type>()));
 
+template <typename Value, auto sentinelValue>
+concept NothrowSentinelValue = requires {
+    { Value{sentinelValue} } noexcept -> std::same_as<Value>;
+};
+
 } // namespace detail
 
 /// Describes a type that can represent an owned external resource identity.
@@ -54,8 +59,7 @@ struct Sentinel final {
     static constexpr auto value = sentinelValue;
 
     template <typename Value>
-        requires requires(Value const& candidate) {
-            { Value{sentinelValue} } noexcept -> std::same_as<Value>;
+        requires detail::NothrowSentinelValue<Value, sentinelValue> && requires(Value const& candidate) {
             { candidate == Value{sentinelValue} } noexcept -> detail::NothrowBooleanConvertible;
         }
     static constexpr auto engaged(Value const& candidate) noexcept -> bool {
@@ -63,8 +67,7 @@ struct Sentinel final {
     }
 
     template <typename Value>
-        requires requires(Value& candidate) {
-            { Value{sentinelValue} } noexcept -> std::same_as<Value>;
+        requires detail::NothrowSentinelValue<Value, sentinelValue> && requires(Value& candidate) {
             { candidate = Value{sentinelValue} } noexcept;
         }
     static constexpr auto disengage(Value& candidate) noexcept -> void {
@@ -133,9 +136,7 @@ template <typename Engagement, ResourceValue Value>
 struct DisengagedValueFactory;
 
 template <auto sentinelValue, ResourceValue Value>
-    requires requires {
-        { Value{sentinelValue} } noexcept -> std::same_as<Value>;
-    }
+    requires NothrowSentinelValue<Value, sentinelValue>
 struct DisengagedValueFactory<Sentinel<sentinelValue>, Value> final {
     static constexpr auto make() noexcept -> Value { return Value{sentinelValue}; }
 };
