@@ -322,12 +322,14 @@ private:
     using Storage = detail::StorageForT<Value, Engagement>;
 
 public:
+    /// Constructs an empty Resource with a default-constructed deleter.
     constexpr Resource() noexcept
         requires std::is_nothrow_default_constructible_v<Deleter> && (!std::is_pointer_v<Deleter>) &&
                      (!std::is_member_pointer_v<Deleter>) && std::is_nothrow_default_constructible_v<Storage>
         : deleter_{},
           storage_{} {}
 
+    /// Adopts a resource identity and default-constructs the deleter.
     template <typename ValueArg>
         requires detail::ValueArgument<ValueArg, Value, Deleter> &&
                      detail::SingleArgumentConstructible<ValueArg, Value> &&
@@ -338,6 +340,7 @@ public:
         : deleter_{},
           storage_{Value{std::forward<ValueArg>(value)}} {}
 
+    /// Constructs an empty Resource with the supplied deleter.
     template <typename DeleterArg>
         requires detail::DeleterArgument<DeleterArg, Value, Deleter> &&
                      detail::SingleArgumentConstructible<DeleterArg, Deleter> &&
@@ -347,32 +350,38 @@ public:
         : deleter_{Deleter{std::forward<DeleterArg>(deleter)}},
           storage_{} {}
 
+    /// Adopts a copy of `value` with the supplied deleter.
     template <typename DeleterArg>
         requires std::is_copy_constructible_v<Value> && detail::NothrowBraceConstructibleFrom<Deleter, DeleterArg>
     constexpr Resource(Value const& value, DeleterArg&& deleter) noexcept(std::is_nothrow_copy_constructible_v<Value>)
         : deleter_{std::forward<DeleterArg>(deleter)},
           storage_{value} {}
 
+    /// Adopts `value` by move with the supplied deleter.
     template <typename DeleterArg>
         requires detail::NothrowBraceConstructibleFrom<Deleter, DeleterArg>
     constexpr Resource(Value&& value, DeleterArg&& deleter) noexcept
         : deleter_{std::forward<DeleterArg>(deleter)},
           storage_{std::move(value)} {}
 
+    /// Adopts a copy of `value` with the supplied deleter and explicit Engagement.
     template <typename DeleterArg>
         requires std::is_copy_constructible_v<Value> && detail::NothrowBraceConstructibleFrom<Deleter, DeleterArg>
     constexpr Resource(Value const& value, DeleterArg&& deleter, Engagement) noexcept(
         std::is_nothrow_copy_constructible_v<Value>)
         : Resource{value, std::forward<DeleterArg>(deleter)} {}
 
+    /// Adopts `value` by move with the supplied deleter and explicit Engagement.
     template <typename DeleterArg>
         requires detail::NothrowBraceConstructibleFrom<Deleter, DeleterArg>
     constexpr Resource(Value&& value, DeleterArg&& deleter, Engagement) noexcept
         : Resource{std::move(value), std::forward<DeleterArg>(deleter)} {}
 
+    /// Copy construction is disabled because ownership is unique.
     constexpr Resource(Resource const&) = delete;
     constexpr auto operator=(Resource const&) -> Resource& = delete;
 
+    /// Transfers ownership from `source`.
     constexpr Resource(Resource&& source) noexcept
         : deleter_{std::move(source.deleter_)},
           storage_{std::move(source.storage_)} {}
