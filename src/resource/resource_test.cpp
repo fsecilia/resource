@@ -619,6 +619,11 @@ static_assert(std::constructible_from<Resource<OpaqueHandle, DeleteOpaque, Opaqu
     OpaqueHandleEngagement>);
 static_assert(ResettableFrom<OpaqueResource, int>);
 static_assert(ResettableFrom<OpaqueEngagedResource, int>);
+static_assert(requires(Resource<IntCompound, DestroyIntCompound>& resource) { resource.reset({3, 7}); });
+static_assert(requires(NonNegativeCompoundResource& resource) { resource.reset({3, 7}); });
+static_assert(requires { Resource<IntCompound, DestroyIntCompound>{{3, 7}, DestroyIntCompound{}}; });
+static_assert(requires { NonNegativeCompoundResource{{3, 7}, DestroyIntCompound{}}; });
+static_assert(requires { NonNegativeCompoundResource{{3, 7}, DestroyIntCompound{}, NonNegativeCompoundEngagement{}}; });
 static_assert(!ResettableFrom<Resource<unsigned, NoopDelete>, int>);
 static_assert(!ResettableFrom<Resource<AggregateHandle, DeleteAggregateHandle>, int>);
 static_assert(!ResettableFrom<Resource<AggregateHandle, DeleteAggregateHandle>, AggregateHandleArgument>);

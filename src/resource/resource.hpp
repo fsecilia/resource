@@ -359,7 +359,7 @@ public:
           storage_{} {}
 
     /// Adopts a resource identity with the supplied deleter.
-    template <typename ValueArg, typename DeleterArg>
+    template <typename ValueArg = Value, typename DeleterArg>
         requires detail::SingleArgumentConstructible<ValueArg, Value> &&
                      detail::BraceConstructibleFrom<Value, ValueArg> &&
                      detail::NothrowBraceConstructibleFrom<Deleter, DeleterArg>
@@ -369,7 +369,7 @@ public:
           storage_{std::forward<ValueArg>(value)} {}
 
     /// Adopts a resource identity with the supplied deleter and explicit Engagement.
-    template <typename ValueArg, typename DeleterArg>
+    template <typename ValueArg = Value, typename DeleterArg>
         requires detail::SingleArgumentConstructible<ValueArg, Value> &&
         detail::BraceConstructibleFrom<Value, ValueArg> && detail::NothrowBraceConstructibleFrom<Deleter, DeleterArg>
     constexpr Resource(ValueArg&& value, DeleterArg&& deleter, Engagement) noexcept(
@@ -477,7 +477,7 @@ public:
     ///
     /// \pre If this object owns a resource, `value` does not identify that same
     /// external resource.
-    template <typename ValueArg>
+    template <typename ValueArg = Value>
         requires detail::SingleArgumentConstructible<ValueArg, Value> && std::constructible_from<Storage, ValueArg> &&
         std::is_nothrow_move_assignable_v<Storage>
     constexpr auto reset(ValueArg&& value) noexcept(std::is_nothrow_constructible_v<Storage, ValueArg>) -> void {
