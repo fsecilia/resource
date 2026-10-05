@@ -50,7 +50,7 @@ Engagement::engaged(value);
 Engagement::disengage(value);
 ```
 
-Both operations must be nonthrowing. `engaged` reports whether the value identifies an owned resource. `disengage` changes it to a representation that does not own a resource. Engagement is compile-time behavior; Resource does not store an Engagement object.
+Both operations must be nonthrowing. `engaged` accepts `Value const&` and returns exactly `bool`; `disengage` accepts `Value&` and returns exactly `void`. `engaged` reports whether the value identifies an owned resource. `disengage` changes it to a representation that does not own a resource. Engagement is compile-time behavior; Resource does not store an Engagement object.
 
 In-band Engagement is an optimization, not a requirement. Resource never infers one from the C++ type. A pointer does not imply `nullptr`, an integer does not imply `0` or `-1`, and a class or enum does not imply a distinguished invalid value. If no explicit Engagement is supplied, Resource uses the default optional-backed representation.
 
@@ -182,7 +182,7 @@ Pointer and member-pointer deleters are excluded from forms that default-constru
 auto const raw = resource.release();
 ```
 
-`reset()` destroys the current resource when engaged and leaves the Resource disengaged. `reset(value)` prepares the incoming identity before destroying the old one, then adopts the prepared identity.
+`reset()` destroys the current resource when engaged and leaves the Resource disengaged. `reset(value)` prepares the incoming identity before destroying the old one, then adopts the prepared identity. The replacing overloads require the selected storage to support nonthrowing move assignment. Optional-backed storage provides that operation without requiring `Value` itself to be move-assignable; in-band Engagement storage requires `Value` to be nothrow move-assignable. For example, a projected compound identity with a `const` member can remain constructible and move-constructible while having no `reset(value)` overload.
 
 Passing a sentinel to a sentinel-backed Resource leaves it disengaged, just as resetting a `std::unique_ptr` with `nullptr` leaves that pointer empty.
 
@@ -296,7 +296,7 @@ Resource itself is header-only. Building the repository is mainly useful for its
 
 ## Development
 
-The project uses C++26. The supported compiler floor is GCC 14.2, with Clang 17 as a cross-check. CMake 3.31.6 is required for the project build.
+The project uses C++26. The supported development toolchain minimums are GCC 14.2, Clang 19.0, CMake 3.31.6, and clang-tidy 21.1.6. Formatting is pinned to clang-format 21.1.8.
 
 After cloning, populate Canon and its nested GoogleTest dependency before building the validation suite:
 
@@ -314,11 +314,11 @@ cmake --workflow --preset gcc-tidy
 cmake --workflow --preset gcc-coverage
 ```
 
-Corresponding `clang-*` workflows are available for the Clang cross-check. The tidy workflows require clang-tidy 21.1.6 or newer. Coverage workflows require gcovr and a compiler-matched coverage backend, then generate the coverage report after tests complete.
+Corresponding `clang-*` workflows are available for the Clang cross-check. The tidy workflows require the supported clang-tidy toolchain. Coverage workflows require gcovr and a compiler-matched coverage backend, then generate the coverage report after tests complete.
 
 The validation suite combines focused GoogleTest cases, compile-time assertions, and an installed-package integration test.
 
-Formatting uses clang-format 21.1.8 exactly.
+Formatting uses the pinned clang-format toolchain.
 
 ## License
 
